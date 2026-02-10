@@ -7,10 +7,31 @@ definitions only, so it can be imported safely from any package layer without
 introducing circular dependencies.
 """
 
-from typing import Any, TypedDict
+import types as _types
+from collections.abc import Iterable
+from typing import Any, TypeVar, TypedDict
+
+
+_T = TypeVar('_T')
 
 
 HTTPHeaders = dict[str, str]
+
+
+def variadic(v: _T | Iterable[_T], allowed_types=(list, tuple)) -> _T | Iterable[_T]:
+    """Wrap ``v`` in a single-item tuple unless it already is a variadic container."""
+    return v if isinstance(v, allowed_types) else (v,)
+
+
+class Namespace(_types.SimpleNamespace):
+    """Simple namespace with convenient iteration helpers."""
+
+    def __iter__(self):
+        return iter(self.__dict__.values())
+
+    @property
+    def items_(self):
+        return self.__dict__.items()
 
 
 class Thumbnail(TypedDict, total=False):
@@ -149,6 +170,8 @@ class InfoDict(TypedDict, total=False):
 
 __all__ = [
     'HTTPHeaders',
+    'variadic',
+    'Namespace',
     'Thumbnail',
     'Subtitle',
     'Chapter',
