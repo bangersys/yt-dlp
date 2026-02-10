@@ -6,7 +6,7 @@ import datetime as dt
 import math
 import re
 
-from .._utils import parse_iso8601
+from ..datetime import parse_iso8601
 
 TYPE_CHECKING = False
 if TYPE_CHECKING:

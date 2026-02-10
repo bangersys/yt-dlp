@@ -9,6 +9,7 @@ from .traversal import *
 from .filesystem import *
 from .formatting import *
 from .json import *
+from .datetime import *
 from .math import lookup_unit_table, parse_filesize
 from .types import *
 from ._utils import *
