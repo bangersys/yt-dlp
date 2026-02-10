@@ -8,7 +8,7 @@ import re
 import shlex
 import sys
 
-from ..constants import CMD_QUOTE_TRANS, IDENTITY, NO_DEFAULT, WINDOWS_QUOTE_TRANS
+from ..constants import ACCENT_CHARS, CMD_QUOTE_TRANS, IDENTITY, NO_DEFAULT, WINDOWS_QUOTE_TRANS
 from ..globals import WINDOWS_VT_MODE
 
 
@@ -255,9 +255,3 @@ def error_to_str(err):
 
 def number_of_digits(number):
     return len('%d' % number)
-__all__ = [
-    'ACCENT_CHARS',
-    'preferredencoding',
-    'supports_terminal_sequences',
-    'write_string',
-]
