@@ -18,7 +18,6 @@ from ..networking._urllib import HTTPHandler
 from .networking import escape_rfc3986  # noqa: F401
 from .networking import normalize_url as escape_url
 from .networking import random_user_agent, std_headers  # noqa: F401
-from ..cookies import YoutubeDLCookieJar  # noqa: F401
 from ..networking._urllib import PUTRequest  # noqa: F401
 from ..networking._urllib import SUPPORTED_ENCODINGS, HEADRequest  # noqa: F401
 from ..networking._urllib import ProxyHandler as PerRequestProxyHandler  # noqa: F401
@@ -219,6 +218,9 @@ YoutubeDLHTTPSHandler = YoutubeDLHandler
 
 class YoutubeDLCookieProcessor(urllib.request.HTTPCookieProcessor):
     def __init__(self, cookiejar=None):
+        if cookiejar is None:
+            from ..cookies import YoutubeDLCookieJar
+            cookiejar = YoutubeDLCookieJar()
         urllib.request.HTTPCookieProcessor.__init__(self, cookiejar)
 
     def http_response(self, request, response):
