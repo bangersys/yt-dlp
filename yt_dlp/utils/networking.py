@@ -11,7 +11,8 @@ if typing.TYPE_CHECKING:
     T = typing.TypeVar('T')
 
 from ..constants import CHROME_MAJOR_VERSION_RANGE, USER_AGENT_TMPL
-from ._utils import NO_DEFAULT, remove_start, format_field
+from ._utils import NO_DEFAULT
+from .formatting import format_field, remove_start
 from .traversal import traverse_obj
 
 

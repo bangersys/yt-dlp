@@ -30,11 +30,9 @@ from ._utils import (
     get_element_html_by_class,
     get_elements_by_class,
     get_element_text_and_html_by_tag,
-    is_iterable_like,
     try_call,
-    url_or_none,
-    variadic,
 )
+from .formatting import is_iterable_like, url_or_none, variadic
 
 
 def traverse_obj(

@@ -52,7 +52,7 @@ class ExtractorError(YoutubeDLError):
 
     @property
     def __msg(self):
-        from ._utils import format_field
+        from .formatting import format_field
 
         return ''.join((
             format_field(self.ie, None, '[%s] '),
@@ -62,7 +62,7 @@ class ExtractorError(YoutubeDLError):
             '' if self.expected else bug_reports_message()))
 
     def format_traceback(self):
-        from ._utils import join_nonempty
+        from .formatting import join_nonempty
 
         return join_nonempty(
             self.traceback and ''.join(traceback.format_tb(self.traceback)),
