@@ -42,7 +42,6 @@ import urllib.parse
 import urllib.request
 import xml.etree.ElementTree
 
-from . import traversal
 from .formatting import *
 
 from ..constants import (
@@ -2186,7 +2185,8 @@ def mimetype2ext(mt, default=NO_DEFAULT):
     mimetype = mt.partition(';')[0].strip().lower()
     _, _, subtype = mimetype.rpartition('/')
 
-    ext = traversal.traverse_obj(MAP, mimetype, subtype, subtype.rsplit('+')[-1])
+    from .traversal import traverse_obj
+    ext = traverse_obj(MAP, mimetype, subtype, subtype.rsplit('+')[-1])
     if ext:
         return ext
     elif default is not NO_DEFAULT:
@@ -2219,8 +2219,10 @@ def parse_codecs(codecs_str):
             vcodec = full_codec
             if parts[0] in ('dvh1', 'dvhe'):
                 hdr = 'DV'
-            elif parts[0] == 'av1' and traversal.traverse_obj(parts, 3) == '10':
-                hdr = 'HDR10'
+            elif parts[0] == 'av1':
+                from .traversal import traverse_obj
+                if traverse_obj(parts, 3) == '10':
+                    hdr = 'HDR10'
             elif parts[:2] == ['vp9', '2']:
                 hdr = 'HDR10'
         elif parts[0] in ('flac', 'mp4a', 'opus', 'vorbis', 'mp3', 'aac', 'ac-4',

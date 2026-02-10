@@ -5,12 +5,15 @@ import collections.abc
 import contextlib
 import functools
 import http.cookies
+import html.entities
+import html.parser
 import inspect
 import itertools
 import re
 import typing
 import xml.etree.ElementTree
 
+from ..compat import compat_HTMLParseError
 from ..types import Subtitle
 
 from ._utils import (
@@ -19,20 +22,255 @@ from ._utils import (
     ExtractorError,
     LazyList,
     deprecation_warning,
-    get_elements_html_by_class,
-    get_elements_html_by_attribute,
-    get_elements_by_attribute,
-    get_element_by_class,
-    get_element_html_by_attribute,
-    get_element_by_attribute,
-    get_element_html_by_id,
-    get_element_by_id,
-    get_element_html_by_class,
-    get_elements_by_class,
-    get_element_text_and_html_by_tag,
     try_call,
 )
 from .formatting import is_iterable_like, url_or_none, variadic
+
+
+class HTMLBreakOnClosingTagParser(html.parser.HTMLParser):
+    """
+    HTML parser which raises HTMLBreakOnClosingTagException upon reaching the
+    closing tag for the first opening tag it has encountered.
+    """
+
+    class HTMLBreakOnClosingTagException(Exception):
+        pass
+
+    def __init__(self):
+        self.tagstack = collections.deque()
+        super().__init__()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_):
+        self.close()
+
+    def close(self):
+        # handle_endtag does not return upon raising HTMLBreakOnClosingTagException,
+        # so data remains buffered; we no longer have any interest in it, thus
+        # override this method to discard it
+        pass
+
+    def handle_starttag(self, tag, _):
+        self.tagstack.append(tag)
+
+    def handle_endtag(self, tag):
+        if not self.tagstack:
+            raise compat_HTMLParseError('no tags in the stack')
+        while self.tagstack:
+            inner_tag = self.tagstack.pop()
+            if inner_tag == tag:
+                break
+        else:
+            raise compat_HTMLParseError(f'matching opening tag for closing {tag} tag not found')
+        if not self.tagstack:
+            raise self.HTMLBreakOnClosingTagException
+
+
+class HTMLAttributeParser(html.parser.HTMLParser):
+    """Trivial HTML parser to gather the attributes for a single element"""
+
+    def __init__(self):
+        self.attrs = {}
+        super().__init__()
+
+    def handle_starttag(self, tag, attrs):
+        self.attrs = dict(attrs)
+        raise compat_HTMLParseError('done')
+
+
+class HTMLListAttrsParser(html.parser.HTMLParser):
+    """HTML parser to gather the attributes for the elements of a list"""
+
+    def __init__(self):
+        super().__init__()
+        self.items = []
+        self._level = 0
+
+    def handle_starttag(self, tag, attrs):
+        if tag == 'li' and self._level == 0:
+            self.items.append(dict(attrs))
+        self._level += 1
+
+    def handle_endtag(self, tag):
+        self._level -= 1
+
+
+def _htmlentity_transform(entity_with_semicolon):
+    """Transforms an HTML entity to a character."""
+    entity = entity_with_semicolon[:-1]
+
+    if entity in html.entities.name2codepoint:
+        return chr(html.entities.name2codepoint[entity])
+    if entity_with_semicolon in html.entities.html5:
+        return html.entities.html5[entity_with_semicolon]
+
+    mobj = re.match(r'#(x[0-9a-fA-F]+|[0-9]+)', entity)
+    if mobj is not None:
+        numstr = mobj.group(1)
+        base = 16 if numstr.startswith('x') else 10
+        if base == 16:
+            numstr = f'0{numstr}'
+        with contextlib.suppress(ValueError):
+            return chr(int(numstr, base))
+
+    return f'&{entity};'
+
+
+def unescapeHTML(s):
+    if s is None:
+        return None
+    assert isinstance(s, str)
+    return re.sub(r'&([^&;]+;)', lambda m: _htmlentity_transform(m.group(1)), s)
+
+
+def clean_html(html):
+    """Clean an HTML snippet into a readable string."""
+    if html is None:  # Convenience for sanitizing descriptions etc.
+        return html
+
+    html = re.sub(r'\s+', ' ', html)
+    html = re.sub(r'(?u)\s?<\s?br\s?/?\s?>\s?', '\n', html)
+    html = re.sub(r'(?u)<\s?/\s?p\s?>\s?<\s?p[^>]*>', '\n', html)
+    html = re.sub('<.*?>', '', html)
+    html = unescapeHTML(html)
+    return html.strip()
+
+
+def escapeHTML(text):
+    """HTML-escape a string."""
+    return (
+        text
+        .replace('&', '&amp;')
+        .replace('<', '&lt;')
+        .replace('>', '&gt;')
+        .replace('"', '&quot;')
+        .replace("'", '&#39;')
+    )
+
+
+def get_element_text_and_html_by_tag(tag, html):
+    """
+    For the first element with the specified tag in the passed HTML document,
+    return its content (text) and the whole element (html).
+    """
+
+    def find_or_raise(haystack, needle, exc):
+        try:
+            return haystack.index(needle)
+        except ValueError:
+            raise exc
+
+    closing_tag = f'</{tag}>'
+    whole_start = find_or_raise(html, f'<{tag}', compat_HTMLParseError(f'opening {tag} tag not found'))
+    content_start = find_or_raise(html[whole_start:], '>', compat_HTMLParseError(f'malformed opening {tag} tag'))
+    content_start += whole_start + 1
+    with HTMLBreakOnClosingTagParser() as parser:
+        parser.feed(html[whole_start:content_start])
+        if not parser.tagstack or parser.tagstack[0] != tag:
+            raise compat_HTMLParseError(f'parser did not match opening {tag} tag')
+        offset = content_start
+        while offset < len(html):
+            next_closing_tag_start = find_or_raise(
+                html[offset:], closing_tag, compat_HTMLParseError(f'closing {tag} tag not found'))
+            next_closing_tag_end = next_closing_tag_start + len(closing_tag)
+            try:
+                parser.feed(html[offset:offset + next_closing_tag_end])
+                offset += next_closing_tag_end
+            except HTMLBreakOnClosingTagParser.HTMLBreakOnClosingTagException:
+                return html[content_start:offset + next_closing_tag_start], html[whole_start:offset + next_closing_tag_end]
+        raise compat_HTMLParseError('unexpected end of html')
+
+
+def get_elements_text_and_html_by_attribute(attribute, value, html, *, tag=r'[\w:.-]+', escape_value=True):
+    """
+    Return the text (content) and the html (whole) of tags with the specified
+    attribute in the passed HTML document.
+    """
+    if not value:
+        return
+
+    quote = '' if re.match(r'''[\s"'`=<>]''', value) else '?'
+    value = re.escape(value) if escape_value else value
+
+    partial_element_re = rf'''(?x)
+        <(?P<tag>{tag})
+         (?:\s(?:[^>"']|"[^"]*"|'[^']*')*)?
+         \s{re.escape(attribute)}\s*=\s*(?P<_q>['"]{quote})(?-x:{value})(?P=_q)
+        '''
+
+    for m in re.finditer(partial_element_re, html):
+        content, whole = get_element_text_and_html_by_tag(m.group('tag'), html[m.start():])
+        yield (
+            unescapeHTML(re.sub(r'^(?P<q>["\'])(?P<content>.*)(?P=q)$', r'\g<content>', content, flags=re.DOTALL)),
+            whole,
+        )
+
+
+def get_element_by_id(id, html, **kwargs):
+    return get_element_by_attribute('id', id, html, **kwargs)
+
+
+def get_element_html_by_id(id, html, **kwargs):
+    return get_element_html_by_attribute('id', id, html, **kwargs)
+
+
+def get_element_by_class(class_name, html):
+    retval = get_elements_by_class(class_name, html)
+    return retval[0] if retval else None
+
+
+def get_element_html_by_class(class_name, html):
+    retval = get_elements_html_by_class(class_name, html)
+    return retval[0] if retval else None
+
+
+def get_element_by_attribute(attribute, value, html, **kwargs):
+    retval = get_elements_by_attribute(attribute, value, html, **kwargs)
+    return retval[0] if retval else None
+
+
+def get_element_html_by_attribute(attribute, value, html, **kargs):
+    retval = get_elements_html_by_attribute(attribute, value, html, **kargs)
+    return retval[0] if retval else None
+
+
+def get_elements_by_class(class_name, html, **kargs):
+    return get_elements_by_attribute(
+        'class', rf'[^\'"]*(?<=[\'"\s]){re.escape(class_name)}(?=[\'"\s])[^\'"]*',
+        html, escape_value=False)
+
+
+def get_elements_html_by_class(class_name, html):
+    return get_elements_html_by_attribute(
+        'class', rf'[^\'"]*(?<=[\'"\s]){re.escape(class_name)}(?=[\'"\s])[^\'"]*',
+        html, escape_value=False)
+
+
+def get_elements_by_attribute(*args, **kwargs):
+    return [content for content, _ in get_elements_text_and_html_by_attribute(*args, **kwargs)]
+
+
+def get_elements_html_by_attribute(*args, **kwargs):
+    return [whole for _, whole in get_elements_text_and_html_by_attribute(*args, **kwargs)]
+
+
+def extract_attributes(html_element):
+    """Given a string for an HTML element, decode and return a dictionary of attributes."""
+    parser = HTMLAttributeParser()
+    with contextlib.suppress(compat_HTMLParseError):
+        parser.feed(html_element)
+        parser.close()
+    return parser.attrs
+
+
+def parse_list(webpage):
+    """Given a string of HTML <li> elements, return a dictionary of their attributes."""
+    parser = HTMLListAttrsParser()
+    parser.feed(webpage)
+    parser.close()
+    return parser.items
 
 
 def traverse_obj(
