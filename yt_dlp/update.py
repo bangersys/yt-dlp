@@ -14,6 +14,14 @@ import sys
 from dataclasses import dataclass
 from zipimport import zipimporter
 
+from .constants import (
+    API_BASE_URL,
+    API_URL as DEFAULT_API_URL,
+    FILE_SUFFIXES,
+    NON_UPDATEABLE_REASONS,
+    REPOSITORY as DEFAULT_REPOSITORY,
+    UPDATE_SOURCES,
+)
 from .networking import Request
 from .networking.exceptions import HTTPError, network_exceptions
 from .utils import (
@@ -35,22 +43,15 @@ from .version import (
     __version__,
 )
 
-UPDATE_SOURCES = {
-    'stable': 'yt-dlp/yt-dlp',
-    'nightly': 'yt-dlp/yt-dlp-nightly-builds',
-    'master': 'yt-dlp/yt-dlp-master-builds',
-}
-REPOSITORY = UPDATE_SOURCES['stable']
 _INVERSE_UPDATE_SOURCES = {value: key for key, value in UPDATE_SOURCES.items()}
 
 _VERSION_RE = re.compile(r'(\d+\.)*\d+')
 _HASH_PATTERN = r'[\da-f]{40}'
 _COMMIT_RE = re.compile(rf'Generated from: https://(?:[^/?#]+/){{3}}commit/(?P<hash>{_HASH_PATTERN})')
 
-API_BASE_URL = 'https://api.github.com/repos'
-
 # Backwards compatibility variables for the current channel
-API_URL = f'{API_BASE_URL}/{REPOSITORY}/releases'
+REPOSITORY = DEFAULT_REPOSITORY
+API_URL = DEFAULT_API_URL
 
 
 @functools.cache
@@ -129,28 +130,8 @@ def current_git_head():
             return stdout.strip()
 
 
-_FILE_SUFFIXES = {
-    'zip': '',
-    'win_exe': '.exe',
-    'win_x86_exe': '_x86.exe',
-    'win_arm64_exe': '_arm64.exe',
-    'darwin_exe': '_macos',
-    'linux_exe': '_linux',
-    'linux_aarch64_exe': '_linux_aarch64',
-    'musllinux_exe': '_musllinux',
-    'musllinux_aarch64_exe': '_musllinux_aarch64',
-}
-
-_NON_UPDATEABLE_REASONS = {
-    **dict.fromkeys(_FILE_SUFFIXES),  # Updatable
-    **dict.fromkeys(
-        ['linux_armv7l_dir', *(f'{variant[:-4]}_dir' for variant in _FILE_SUFFIXES if variant.endswith('_exe'))],
-        'Auto-update is not supported for unpackaged executables; Re-download the latest release'),
-    'py2exe': 'py2exe is no longer supported by yt-dlp; This executable cannot be updated',
-    'source': 'You cannot update when running from source code; Use git to pull the latest changes',
-    'unknown': 'You installed yt-dlp from a manual build or with a package manager; Use that to update',
-    'other': 'You are using an unofficial build of yt-dlp; Build the executable again',
-}
+_FILE_SUFFIXES = FILE_SUFFIXES
+_NON_UPDATEABLE_REASONS = NON_UPDATEABLE_REASONS
 
 
 def is_non_updateable():
