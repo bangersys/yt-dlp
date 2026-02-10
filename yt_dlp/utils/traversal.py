@@ -11,6 +11,8 @@ import re
 import typing
 import xml.etree.ElementTree
 
+from ..types import Subtitle
+
 from ._utils import (
     IDENTITY,
     NO_DEFAULT,
@@ -332,14 +334,14 @@ class _RequiredError(ExtractorError):
 
 
 @typing.overload
-def subs_list_to_dict(*, lang: str | None = 'und', ext: str | None = None) -> collections.abc.Callable[[list[dict]], dict[str, list[dict]]]: ...
+def subs_list_to_dict(*, lang: str | None = 'und', ext: str | None = None) -> collections.abc.Callable[[list[Subtitle]], dict[str, list[Subtitle]]]: ...
 
 
 @typing.overload
-def subs_list_to_dict(subs: list[dict] | None, /, *, lang: str | None = 'und', ext: str | None = None) -> dict[str, list[dict]]: ...
+def subs_list_to_dict(subs: list[Subtitle] | None, /, *, lang: str | None = 'und', ext: str | None = None) -> dict[str, list[Subtitle]]: ...
 
 
-def subs_list_to_dict(subs: list[dict] | None = None, /, *, lang='und', ext=None):
+def subs_list_to_dict(subs: list[Subtitle] | None = None, /, *, lang='und', ext=None):
     """
     Convert subtitles from a traversal into a subtitle dict.
     The path should have an `all` immediately before this function.
