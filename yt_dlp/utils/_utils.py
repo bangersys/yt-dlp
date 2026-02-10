@@ -46,6 +46,8 @@ import xml.etree.ElementTree
 
 from . import traversal
 
+from ..constants import CMD_QUOTE_TRANS, FILE_SIZE_UNITS, WINDOWS_QUOTE_TRANS
+
 from ..compat import (
     compat_datetime_from_timestamp,
     compat_etree_fromstring,
@@ -1682,18 +1684,8 @@ def get_filesystem_encoding():
     return encoding if encoding is not None else 'utf-8'
 
 
-_WINDOWS_QUOTE_TRANS = str.maketrans({'"': R'\"'})
-_CMD_QUOTE_TRANS = str.maketrans({
-    # Keep quotes balanced by replacing them with `""` instead of `\\"`
-    '"': '""',
-    # These require an env-variable `=` containing `"^\n\n"` (set in `utils.Popen`)
-    # `=` should be unique since variables containing `=` cannot be set using cmd
-    '\n': '%=%',
-    '\r': '%=%',
-    # Use zero length variable replacement so `%` doesn't get expanded
-    # `cd` is always set as long as extensions are enabled (`/E:ON` in `utils.Popen`)
-    '%': '%%cd:~,%',
-})
+_WINDOWS_QUOTE_TRANS = str.maketrans(WINDOWS_QUOTE_TRANS)
+_CMD_QUOTE_TRANS = str.maketrans(CMD_QUOTE_TRANS)
 
 
 def shell_quote(args, *, shell=False):
@@ -1772,69 +1764,8 @@ def parse_filesize(s):
 
     # The lower-case forms are of course incorrect and unofficial,
     # but we support those too
-    _UNIT_TABLE = {
-        'B': 1,
-        'b': 1,
-        'bytes': 1,
-        'KiB': 1024,
-        'KB': 1000,
-        'kB': 1024,
-        'Kb': 1000,
-        'kb': 1000,
-        'kilobytes': 1000,
-        'kibibytes': 1024,
-        'MiB': 1024 ** 2,
-        'MB': 1000 ** 2,
-        'mB': 1024 ** 2,
-        'Mb': 1000 ** 2,
-        'mb': 1000 ** 2,
-        'megabytes': 1000 ** 2,
-        'mebibytes': 1024 ** 2,
-        'GiB': 1024 ** 3,
-        'GB': 1000 ** 3,
-        'gB': 1024 ** 3,
-        'Gb': 1000 ** 3,
-        'gb': 1000 ** 3,
-        'gigabytes': 1000 ** 3,
-        'gibibytes': 1024 ** 3,
-        'TiB': 1024 ** 4,
-        'TB': 1000 ** 4,
-        'tB': 1024 ** 4,
-        'Tb': 1000 ** 4,
-        'tb': 1000 ** 4,
-        'terabytes': 1000 ** 4,
-        'tebibytes': 1024 ** 4,
-        'PiB': 1024 ** 5,
-        'PB': 1000 ** 5,
-        'pB': 1024 ** 5,
-        'Pb': 1000 ** 5,
-        'pb': 1000 ** 5,
-        'petabytes': 1000 ** 5,
-        'pebibytes': 1024 ** 5,
-        'EiB': 1024 ** 6,
-        'EB': 1000 ** 6,
-        'eB': 1024 ** 6,
-        'Eb': 1000 ** 6,
-        'eb': 1000 ** 6,
-        'exabytes': 1000 ** 6,
-        'exbibytes': 1024 ** 6,
-        'ZiB': 1024 ** 7,
-        'ZB': 1000 ** 7,
-        'zB': 1024 ** 7,
-        'Zb': 1000 ** 7,
-        'zb': 1000 ** 7,
-        'zettabytes': 1000 ** 7,
-        'zebibytes': 1024 ** 7,
-        'YiB': 1024 ** 8,
-        'YB': 1000 ** 8,
-        'yB': 1024 ** 8,
-        'Yb': 1000 ** 8,
-        'yb': 1000 ** 8,
-        'yottabytes': 1000 ** 8,
-        'yobibytes': 1024 ** 8,
-    }
 
-    return lookup_unit_table(_UNIT_TABLE, s)
+    return lookup_unit_table(FILE_SIZE_UNITS, s)
 
 
 def parse_count(s):

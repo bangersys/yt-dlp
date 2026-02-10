@@ -10,14 +10,12 @@ import urllib.request
 if typing.TYPE_CHECKING:
     T = typing.TypeVar('T')
 
+from ..constants import CHROME_MAJOR_VERSION_RANGE, USER_AGENT_TMPL
 from ._utils import NO_DEFAULT, remove_start, format_field
 from .traversal import traverse_obj
 
 
 def random_user_agent():
-    USER_AGENT_TMPL = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{} Safari/537.36'
-    # Target versions released within the last ~6 months
-    CHROME_MAJOR_VERSION_RANGE = (137, 143)
     return USER_AGENT_TMPL.format(f'{random.randint(*CHROME_MAJOR_VERSION_RANGE)}.0.0.0')
 
 

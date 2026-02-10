@@ -10,6 +10,7 @@ import time
 
 from .common import PostProcessor
 from ..compat import imghdr
+from ..constants import ACODECS, EXT_TO_OUT_FORMATS
 from ..utils import (
     MEDIA_EXTENSIONS,
     ISO639Utils,
@@ -32,32 +33,6 @@ from ..utils import (
     variadic,
     write_json_file,
 )
-
-EXT_TO_OUT_FORMATS = {
-    'aac': 'adts',
-    'flac': 'flac',
-    'm4a': 'ipod',
-    'mka': 'matroska',
-    'mkv': 'matroska',
-    'mpg': 'mpeg',
-    'ogv': 'ogg',
-    'ts': 'mpegts',
-    'wma': 'asf',
-    'wmv': 'asf',
-    'weba': 'webm',
-    'vtt': 'webvtt',
-}
-ACODECS = {
-    # name: (ext, encoder, opts)
-    'mp3': ('mp3', 'libmp3lame', ()),
-    'aac': ('m4a', 'aac', ('-f', 'adts')),
-    'm4a': ('m4a', 'aac', ('-bsf:a', 'aac_adtstoasc')),
-    'opus': ('opus', 'libopus', ()),
-    'vorbis': ('ogg', 'libvorbis', ()),
-    'flac': ('flac', 'flac', ()),
-    'alac': ('m4a', None, ('-acodec', 'alac')),
-    'wav': ('wav', None, ('-f', 'wav')),
-}
 
 
 def create_mapping_re(supported):

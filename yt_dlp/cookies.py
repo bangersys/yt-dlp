@@ -25,6 +25,7 @@ from .aes import (
     aes_gcm_decrypt_and_verify_bytes,
     unpad_pkcs7,
 )
+from .constants import CHROMIUM_BASED_BROWSERS, SUPPORTED_BROWSERS
 from .dependencies import (
     _SECRETSTORAGE_UNAVAILABLE_REASON,
     secretstorage,
@@ -45,10 +46,6 @@ from .utils import (
 )
 from .utils._utils import _YDLLogger
 from .utils.networking import normalize_url
-
-CHROMIUM_BASED_BROWSERS = {'brave', 'chrome', 'chromium', 'edge', 'opera', 'vivaldi', 'whale'}
-SUPPORTED_BROWSERS = CHROMIUM_BASED_BROWSERS | {'firefox', 'safari'}
-
 
 class YDLLogger(_YDLLogger):
     def warning(self, message, only_once=False):  # compat
