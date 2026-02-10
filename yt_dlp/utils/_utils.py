@@ -43,11 +43,11 @@ import urllib.request
 import xml.etree.ElementTree
 
 from . import traversal
+from .formatting import *
 
 from ..constants import (
     ACCENT_CHARS,
     BOMS,
-    CMD_QUOTE_TRANS,
     COUNTRY_IP_MAP,
     COUNTRY_MAP,
     DATE_FORMATS,
@@ -56,13 +56,11 @@ from ..constants import (
     DEFAULT_OUTTMPL,
     ENGLISH_MONTH_NAMES,
     FILE_SIZE_UNITS,
-    IDENTITY,
     JSON_LD_RE,
     KNOWN_EXTENSIONS,
     LINK_TEMPLATES,
     MEDIA_EXTENSIONS,
     MONTH_NAMES,
-    NO_DEFAULT,
     NUMBER_RE,
     OUTTMPL_TYPES,
     PACKED_CODES_RE,
@@ -72,7 +70,6 @@ from ..constants import (
     TIMEZONE_NAMES,
     TV_PARENTAL_GUIDELINES,
     US_RATINGS,
-    WINDOWS_QUOTE_TRANS,
 )
 
 from ..compat import (
@@ -82,7 +79,7 @@ from ..compat import (
     compat_HTMLParseError,
 )
 from ..dependencies import xattr
-from ..globals import IN_CLI, WINDOWS_VT_MODE
+from ..globals import IN_CLI
 
 from .exceptions import *
 
@@ -92,21 +89,6 @@ __name__ = __name__.rsplit('.', 1)[0]  # noqa: A001 # Pretend to be the parent m
 
 # moved to constants.py
 
-
-@functools.cache
-def preferredencoding():
-    """Get preferred encoding.
-
-    Returns the best encoding scheme for the system, based on
-    locale.getpreferredencoding() and some further tweaks.
-    """
-    try:
-        pref = locale.getpreferredencoding()
-        'TEST'.encode(pref)
-    except Exception:
-        pref = 'UTF-8'
-
-    return pref
 
 
 def write_json_file(obj, fn):
@@ -135,21 +117,21 @@ def write_json_file(obj, fn):
         raise
 
 
-def partial_application(func):
-    sig = inspect.signature(func)
-    required_args = [
-        param.name for param in sig.parameters.values()
-        if param.kind in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
-        if param.default is inspect.Parameter.empty
-    ]
+# TODO: Use global logger
+def deprecation_warning(msg, *, printer=None, stacklevel=0, **kwargs):
+    if IN_CLI.value:
+        if msg in deprecation_warning._cache:
+            return
+        deprecation_warning._cache.add(msg)
+        if printer:
+            return printer(f'{msg}{bug_reports_message()}', **kwargs)
+        return write_string(f'ERROR: {msg}{bug_reports_message()}\n', **kwargs)
+    else:
+        import warnings
+        warnings.warn(DeprecationWarning(msg), stacklevel=stacklevel + 3)
 
-    @functools.wraps(func)
-    def wrapped(*args, **kwargs):
-        if set(required_args[len(args):]).difference(kwargs):
-            return functools.partial(func, *args, **kwargs)
-        return func(*args, **kwargs)
 
-    return wrapped
+deprecation_warning._cache = set()
 
 
 def find_xpath_attr(node, xpath, key, val=None):
@@ -1166,44 +1148,6 @@ def get_windows_version():
         return ()
 
 
-def write_string(s, out=None, encoding=None):
-    assert isinstance(s, str)
-    out = out or sys.stderr
-    # `sys.stderr` might be `None` (Ref: https://github.com/pyinstaller/pyinstaller/pull/7217)
-    if not out:
-        return
-
-    if os.name == 'nt' and supports_terminal_sequences(out):
-        s = re.sub(r'([\r\n]+)', r' \1', s)
-
-    enc, buffer = None, out
-    # `mode` might be `None` (Ref: https://github.com/yt-dlp/yt-dlp/issues/8816)
-    if 'b' in (getattr(out, 'mode', None) or ''):
-        enc = encoding or preferredencoding()
-    elif hasattr(out, 'buffer'):
-        buffer = out.buffer
-        enc = encoding or getattr(out, 'encoding', None) or preferredencoding()
-
-    buffer.write(s.encode(enc, 'ignore') if enc else s)
-    out.flush()
-
-
-# TODO: Use global logger
-def deprecation_warning(msg, *, printer=None, stacklevel=0, **kwargs):
-    if IN_CLI.value:
-        if msg in deprecation_warning._cache:
-            return
-        deprecation_warning._cache.add(msg)
-        if printer:
-            return printer(f'{msg}{bug_reports_message()}', **kwargs)
-        return write_string(f'ERROR: {msg}{bug_reports_message()}\n', **kwargs)
-    else:
-        import warnings
-        warnings.warn(DeprecationWarning(msg), stacklevel=stacklevel + 3)
-
-
-deprecation_warning._cache = set()
-
 
 class LockingUnsupportedError(OSError):
     msg = 'File locking is not supported'
@@ -1371,23 +1315,6 @@ def get_filesystem_encoding():
     return encoding if encoding is not None else 'utf-8'
 
 
-_WINDOWS_QUOTE_TRANS = str.maketrans(WINDOWS_QUOTE_TRANS)
-_CMD_QUOTE_TRANS = str.maketrans(CMD_QUOTE_TRANS)
-
-
-def shell_quote(args, *, shell=False):
-    args = list(variadic(args))
-
-    if os.name != 'nt':
-        return shlex.join(args)
-
-    trans = _CMD_QUOTE_TRANS if shell else _WINDOWS_QUOTE_TRANS
-    return ' '.join(
-        s if re.fullmatch(r'[\w#$*\-+./:?@\\]+', s, re.ASCII)
-        else re.sub(r'(\\+)("|$)', r'\1\1\2', s).translate(trans).join('""')
-        for s in args)
-
-
 def smuggle_url(url, data):
     """ Pass additional data in a URL for internal use. """
 
@@ -1405,24 +1332,6 @@ def unsmuggle_url(smug_url, default=None):
     jsond = urllib.parse.parse_qs(sdata)['__youtubedl_smuggle'][0]
     data = json.loads(jsond)
     return url, data
-
-
-def format_decimal_suffix(num, fmt='%d%s', *, factor=1000):
-    """ Formats numbers with decimal sufixes like K, M, etc """
-    num, factor = float_or_none(num), float(factor)
-    if num is None or num < 0:
-        return None
-    POSSIBLE_SUFFIXES = 'kMGTPEZY'
-    exponent = 0 if num == 0 else min(int(math.log(num, factor)), len(POSSIBLE_SUFFIXES))
-    suffix = ['', *POSSIBLE_SUFFIXES][exponent]
-    if factor == 1024:
-        suffix = {'k': 'Ki', '': ''}.get(suffix, f'{suffix}i')
-    converted = num / (factor ** exponent)
-    return fmt % (converted, suffix)
-
-
-def format_bytes(bytes):
-    return format_decimal_suffix(bytes, '%.2f%sB', factor=1024) or 'N/A'
 
 
 def lookup_unit_table(unit_table, s, strict=False):
@@ -1580,23 +1489,6 @@ def setproctitle(title):
         return  # Strange libc, just skip this
 
 
-def remove_start(s, start):
-    return s[len(start):] if s is not None and s.startswith(start) else s
-
-
-def remove_end(s, end):
-    return s[:-len(end)] if s is not None and end and s.endswith(end) else s
-
-
-def remove_quotes(s):
-    if s is None or len(s) < 2:
-        return s
-    for quote in ('"', "'"):
-        if s[0] == quote and s[-1] == quote:
-            return s[1:-1]
-    return s
-
-
 def get_domain(url):
     """
     This implementation is inconsistent, but is kept for compatibility.
@@ -1628,60 +1520,6 @@ def urljoin(base, path):
             r'^(?:https?:)?//', base):
         return None
     return urllib.parse.urljoin(base, path)
-
-
-@partial_application
-def int_or_none(v, scale=1, default=None, get_attr=None, invscale=1, base=None):
-    if get_attr and v is not None:
-        v = getattr(v, get_attr, None)
-    if invscale == 1 and scale < 1:
-        invscale = int(1 / scale)
-        scale = 1
-    try:
-        return (int(v) if base is None else int(v, base=base)) * invscale // scale
-    except (ValueError, TypeError, OverflowError):
-        return default
-
-
-def str_or_none(v, default=None):
-    return default if v is None else str(v)
-
-
-def str_to_int(int_str):
-    """ A more relaxed version of int_or_none """
-    if isinstance(int_str, int):
-        return int_str
-    elif isinstance(int_str, str):
-        int_str = re.sub(r'[,\.\+]', '', int_str)
-        return int_or_none(int_str)
-
-
-@partial_application
-def float_or_none(v, scale=1, invscale=1, default=None):
-    if v is None:
-        return default
-    if invscale == 1 and scale < 1:
-        invscale = int(1 / scale)
-        scale = 1
-    try:
-        return float(v) * invscale / scale
-    except (ValueError, TypeError):
-        return default
-
-
-def bool_or_none(v, default=None):
-    return v if isinstance(v, bool) else default
-
-
-def strip_or_none(v, default=None):
-    return v.strip() if isinstance(v, str) else default
-
-
-def url_or_none(url):
-    if not url or not isinstance(url, str):
-        return None
-    url = url.strip()
-    return url if re.match(r'(?:(?:https?|rt(?:m(?:pt?[es]?|fp)|sp[su]?)|mms|ftps?|wss?):)?//', url) else None
 
 
 def strftime_or_none(timestamp, date_format='%Y%m%d', default=None):
@@ -2283,19 +2121,6 @@ def multipart_encode(data, boundary=None):
     return out, content_type
 
 
-def is_iterable_like(x, allowed_types=collections.abc.Iterable, blocked_types=NO_DEFAULT):
-    if blocked_types is NO_DEFAULT:
-        blocked_types = (str, bytes, collections.abc.Mapping)
-    return isinstance(x, allowed_types) and not isinstance(x, blocked_types)
-
-
-def variadic(x, allowed_types=NO_DEFAULT):
-    if not isinstance(allowed_types, (tuple, type)):
-        deprecation_warning('allowed_types should be a tuple or a type')
-        allowed_types = tuple(allowed_types)
-    return x if is_iterable_like(x, blocked_types=allowed_types) else (x, )
-
-
 def try_call(*funcs, expected_type=None, args=[], kwargs={}):
     for f in funcs:
         try:
@@ -2483,15 +2308,6 @@ def ytdl_is_updateable():
     from ..update import is_non_updateable
 
     return not is_non_updateable()
-
-
-def args_to_str(args):
-    # Get a short string representation for a subprocess command
-    return shell_quote(args)
-
-
-def error_to_str(err):
-    return f'{type(err).__name__}: {err}'
 
 
 @partial_application
@@ -3704,14 +3520,6 @@ def to_high_limit_path(path):
     return path
 
 
-@partial_application
-def format_field(obj, field=None, template='%s', ignore=NO_DEFAULT, default='', func=IDENTITY):
-    val = traversal.traverse_obj(obj, *variadic(field))
-    if not val if ignore is NO_DEFAULT else val in variadic(ignore):
-        return default
-    return template % func(val)
-
-
 def clean_podcast_url(url):
     url = re.sub(r'''(?x)
         (?:
@@ -3824,18 +3632,6 @@ def jwt_decode_hs256(jwt):
     return json.loads(base64.urlsafe_b64decode(f'{payload_b64}==='))
 
 
-@functools.cache
-def supports_terminal_sequences(stream):
-    if os.name == 'nt':
-        if not WINDOWS_VT_MODE.value:
-            return False
-    elif not os.getenv('TERM'):
-        return False
-    try:
-        return stream.isatty()
-    except BaseException:
-        return False
-
 
 def windows_enable_vt_mode():
     """Ref: https://bugs.python.org/issue30075 """
@@ -3867,22 +3663,6 @@ def windows_enable_vt_mode():
     WINDOWS_VT_MODE.value = True
     supports_terminal_sequences.cache_clear()
 
-
-_terminal_sequences_re = re.compile('\033\\[[^m]+m')
-
-
-def remove_terminal_sequences(string):
-    return _terminal_sequences_re.sub('', string)
-
-
-def number_of_digits(number):
-    return len('%d' % number)
-
-
-def join_nonempty(*values, delim='-', from_dict=None):
-    if from_dict is not None:
-        values = (traversal.traverse_obj(from_dict, variadic(v)) for v in values)
-    return delim.join(map(str, filter(None, values)))
 
 
 def scale_thumbnails_to_max_format_width(formats, thumbnails, url_width_re):
@@ -4306,14 +4086,6 @@ class RetryManager:
 def make_archive_id(ie, video_id):
     ie_key = ie if isinstance(ie, str) else ie.ie_key()
     return f'{ie_key.lower()} {video_id}'
-
-
-@partial_application
-def truncate_string(s, left, right=0):
-    assert left > 3 and right >= 0
-    if s is None or len(s) <= left + right:
-        return s
-    return f'{s[:left - 3]}...{s[-right:] if right else ""}'
 
 
 def orderedSet_from_options(options, alias_dict, *, use_regex=False, start=None):
