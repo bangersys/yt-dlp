@@ -6,6 +6,11 @@ del passthrough_module
 
 # isort: off
 from .traversal import *
+from .filesystem import *
+from .formatting import *
+from .json import *
+from .math import lookup_unit_table, parse_filesize
+from .types import *
 from ._utils import *
 from ._utils import _configuration_args, _get_exe_version_output  # noqa: F401
 from ..constants import IDENTITY, NO_DEFAULT, Namespace  # noqa: F401

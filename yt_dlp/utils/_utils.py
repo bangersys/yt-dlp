@@ -85,28 +85,18 @@ from ..dependencies import xattr
 from ..globals import IN_CLI, WINDOWS_VT_MODE
 
 from .exceptions import *
+from .formatting import preferredencoding, supports_terminal_sequences, write_string
+from .json import NO_DEFAULT
+from .formatting import preferredencoding, supports_terminal_sequences, write_string
+from .json import NO_DEFAULT
+from .math import lookup_unit_table, parse_filesize
+from .types import variadic
 
 __name__ = __name__.rsplit('.', 1)[0]  # noqa: A001 # Pretend to be the parent module
 
 
 
 # moved to constants.py
-
-
-@functools.cache
-def preferredencoding():
-    """Get preferred encoding.
-
-    Returns the best encoding scheme for the system, based on
-    locale.getpreferredencoding() and some further tweaks.
-    """
-    try:
-        pref = locale.getpreferredencoding()
-        'TEST'.encode(pref)
-    except Exception:
-        pref = 'UTF-8'
-
-    return pref
 
 
 def write_json_file(obj, fn):
@@ -501,45 +491,35 @@ class LenientJSONDecoder(json.JSONDecoder):
         assert False, 'Too many attempts to decode JSON'
 
 
-def sanitize_open(filename, open_mode):
-    """Try to open the given filename, and slightly tweak it if this fails.
+from .filesystem import (
+    Popen,
+    _get_exe_version_output,
+    check_executable,
+    detect_exe_version,
+    encodeArgument,
+    expand_path,
+    get_executable_path,
+    get_filesystem_encoding,
+    get_system_config_dirs,
+    get_user_config_dirs,
+    is_path_like,
+    locked_file,
+    make_dir,
+    parse_filesize,
+    prepend_extension,
+    replace_extension,
+    sanitize_filename,
+    sanitize_open,
+    sanitize_path,
+    sanitize_url,
+    shell_quote,
+    to_high_limit_path,
+)
 
-    Attempts to open the given filename. If this fails, it tries to change
-    the filename slightly, step by step, until it's either able to open it
-    or it fails and raises a final exception, like the standard open()
-    function.
+# Move these to re-exports
+# sanitize_open is imported above
 
-    It returns the tuple (stream, definitive_file_name).
-    """
-    if filename == '-':
-        if sys.platform == 'win32':
-            import msvcrt
-
-            # stdout may be any IO stream, e.g. when using contextlib.redirect_stdout
-            with contextlib.suppress(io.UnsupportedOperation):
-                msvcrt.setmode(sys.stdout.fileno(), os.O_BINARY)
-        return (sys.stdout.buffer if hasattr(sys.stdout, 'buffer') else sys.stdout, filename)
-
-    for attempt in range(2):
-        try:
-            try:
-                if sys.platform == 'win32':
-                    # FIXME: An exclusive lock also locks the file from being read.
-                    # Since windows locks are mandatory, don't lock the file on windows (for now).
-                    # Ref: https://github.com/yt-dlp/yt-dlp/issues/3124
-                    raise LockingUnsupportedError
-                stream = locked_file(filename, open_mode, block=False).__enter__()
-            except OSError:
-                stream = open(filename, open_mode)
-            return stream, filename
-        except OSError as err:
-            if attempt or err.errno in (errno.EACCES,):
-                raise
-            old_filename, filename = filename, sanitize_path(filename)
-            if old_filename == filename:
-                raise
-
-
+# sanitize_open is imported above
 def timeconvert(timestr):
     """Convert RFC 2822 defined time string into system timestamp"""
     timestamp = None
@@ -549,129 +529,7 @@ def timeconvert(timestr):
     return timestamp
 
 
-def sanitize_filename(s, restricted=False, is_id=NO_DEFAULT):
-    """Sanitizes a string so it could be used as part of a filename.
-    @param restricted   Use a stricter subset of allowed characters
-    @param is_id        Whether this is an ID that should be kept unchanged if possible.
-                        If unset, yt-dlp's new sanitization rules are in effect
-    """
-    if s == '':
-        return ''
 
-    def replace_insane(char):
-        if restricted and char in ACCENT_CHARS:
-            return ACCENT_CHARS[char]
-        elif not restricted and char == '\n':
-            return '\0 '
-        elif is_id is NO_DEFAULT and not restricted and char in '"*:<>?|/\\':
-            # Replace with their full-width unicode counterparts
-            return {'/': '\u29F8', '\\': '\u29f9'}.get(char, chr(ord(char) + 0xfee0))
-        elif char == '?' or ord(char) < 32 or ord(char) == 127:
-            return ''
-        elif char == '"':
-            return '' if restricted else '\''
-        elif char == ':':
-            return '\0_\0-' if restricted else '\0 \0-'
-        elif char in '\\/|*<>':
-            return '\0_'
-        if restricted and (char in '!&\'()[]{}$;`^,#' or char.isspace() or ord(char) > 127):
-            return '' if unicodedata.category(char)[0] in 'CM' else '\0_'
-        return char
-
-    # Replace look-alike Unicode glyphs
-    if restricted and (is_id is NO_DEFAULT or not is_id):
-        s = unicodedata.normalize('NFKC', s)
-    s = re.sub(r'[0-9]+(?::[0-9]+)+', lambda m: m.group(0).replace(':', '_'), s)  # Handle timestamps
-    result = ''.join(map(replace_insane, s))
-    if is_id is NO_DEFAULT:
-        result = re.sub(r'(\0.)(?:(?=\1)..)+', r'\1', result)  # Remove repeated substitute chars
-        STRIP_RE = r'(?:\0.|[ _-])*'
-        result = re.sub(f'^\0.{STRIP_RE}|{STRIP_RE}\0.$', '', result)  # Remove substitute chars from start/end
-    result = result.replace('\0', '') or '_'
-
-    if not is_id:
-        while '__' in result:
-            result = result.replace('__', '_')
-        result = result.strip('_')
-        # Common case of "Foreign band name - English song title"
-        if restricted and result.startswith('-_'):
-            result = result[2:]
-        if result.startswith('-'):
-            result = '_' + result[len('-'):]
-        result = result.lstrip('.')
-        if not result:
-            result = '_'
-    return result
-
-
-def _sanitize_path_parts(parts):
-    sanitized_parts = []
-    for part in parts:
-        if not part or part == '.':
-            continue
-        elif part == '..':
-            if sanitized_parts and sanitized_parts[-1] != '..':
-                sanitized_parts.pop()
-            else:
-                sanitized_parts.append('..')
-            continue
-        # Replace invalid segments with `#`
-        # - trailing dots and spaces (`asdf...` => `asdf..#`)
-        # - invalid chars (`<>` => `##`)
-        sanitized_part = re.sub(r'[/<>:"\|\\?\*]|[\s.]$', '#', part)
-        sanitized_parts.append(sanitized_part)
-
-    return sanitized_parts
-
-
-def sanitize_path(s, force=False):
-    """Sanitizes and normalizes path on Windows"""
-    if sys.platform != 'win32':
-        if not force:
-            return s
-        root = '/' if s.startswith('/') else ''
-        path = '/'.join(_sanitize_path_parts(s.split('/')))
-        return root + path if root or path else '.'
-
-    normed = s.replace('/', '\\')
-
-    if normed.startswith('\\\\'):
-        # UNC path (`\\SERVER\SHARE`) or device path (`\\.`, `\\?`)
-        parts = normed.split('\\')
-        root = '\\'.join(parts[:4]) + '\\'
-        parts = parts[4:]
-    elif normed[1:2] == ':':
-        # absolute path or drive relative path
-        offset = 3 if normed[2:3] == '\\' else 2
-        root = normed[:offset]
-        parts = normed[offset:].split('\\')
-    else:
-        # relative/drive root relative path
-        root = '\\' if normed[:1] == '\\' else ''
-        parts = normed.split('\\')
-
-    path = '\\'.join(_sanitize_path_parts(parts))
-    return root + path if root or path else '.'
-
-
-def sanitize_url(url, *, scheme='http'):
-    # Prepend protocol-less URLs with `http:` scheme in order to mitigate
-    # the number of unwanted failures due to missing protocol
-    if url is None:
-        return
-    elif url.startswith('//'):
-        return f'{scheme}:{url}'
-    # Fix some common typos seen so far
-    COMMON_TYPOS = (
-        # https://github.com/ytdl-org/youtube-dl/issues/15649
-        (r'^httpss://', r'https://'),
-        # https://bx1.be/lives/direct-tv/
-        (r'^rmtp([es]?)://', r'rtmp\1://'),
-    )
-    for mistake, fixup in COMMON_TYPOS:
-        if re.match(mistake, url):
-            return re.sub(mistake, fixup, url)
-    return url
 
 
 def extract_basic_auth(url):
@@ -685,10 +543,6 @@ def extract_basic_auth(url):
         ('{}:{}'.format(parts.username, parts.password or '')).encode())
     return url, f'Basic {auth_payload.decode()}'
 
-
-def expand_path(s):
-    """Expand shell variables and ~"""
-    return os.path.expandvars(compat_expanduser(s))
 
 
 def orderedSet(iterable, *, lazy=False):
@@ -758,89 +612,6 @@ class netrc_from_content(netrc.netrc):
         with io.StringIO(content) as stream:
             self._parse('-', stream, False)
 
-
-class Popen(subprocess.Popen):
-    if sys.platform == 'win32':
-        _startupinfo = subprocess.STARTUPINFO()
-        _startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-    else:
-        _startupinfo = None
-
-    @staticmethod
-    def _fix_pyinstaller_issues(env):
-        if not hasattr(sys, '_MEIPASS'):
-            return
-
-        # Force spawning independent subprocesses for exes bundled with PyInstaller>=6.10
-        # Ref: https://pyinstaller.org/en/v6.10.0/CHANGES.html#incompatible-changes
-        #      https://github.com/yt-dlp/yt-dlp/issues/11259
-        env['PYINSTALLER_RESET_ENVIRONMENT'] = '1'
-
-        # Restore LD_LIBRARY_PATH when using PyInstaller
-        # Ref: https://pyinstaller.org/en/v6.10.0/runtime-information.html#ld-library-path-libpath-considerations
-        #      https://github.com/yt-dlp/yt-dlp/issues/4573
-        def _fix(key):
-            orig = env.get(f'{key}_ORIG')
-            if orig is None:
-                env.pop(key, None)
-            else:
-                env[key] = orig
-
-        _fix('LD_LIBRARY_PATH')  # Linux
-        _fix('DYLD_LIBRARY_PATH')  # macOS
-
-    def __init__(self, args, *remaining, env=None, text=False, shell=False, **kwargs):
-        if env is None:
-            env = os.environ.copy()
-        self._fix_pyinstaller_issues(env)
-
-        self.__text_mode = kwargs.get('encoding') or kwargs.get('errors') or text or kwargs.get('universal_newlines')
-        if text is True:
-            kwargs['universal_newlines'] = True  # For 3.6 compatibility
-            kwargs.setdefault('encoding', 'utf-8')
-            kwargs.setdefault('errors', 'replace')
-
-        if os.name == 'nt' and kwargs.get('executable') is None:
-            # Must apply shell escaping if we are trying to run a batch file
-            # These conditions should be very specific to limit impact
-            if not shell and isinstance(args, list) and args and args[0].lower().endswith(('.bat', '.cmd')):
-                shell = True
-
-            if shell:
-                if not isinstance(args, str):
-                    args = shell_quote(args, shell=True)
-                shell = False
-                # Set variable for `cmd.exe` newline escaping (see `utils.shell_quote`)
-                env['='] = '"^\n\n"'
-                args = f'{self.__comspec()} /Q /S /D /V:OFF /E:ON /C "{args}"'
-
-        super().__init__(args, *remaining, env=env, shell=shell, **kwargs, startupinfo=self._startupinfo)
-
-    def __comspec(self):
-        comspec = os.environ.get('ComSpec') or os.path.join(
-            os.environ.get('SystemRoot', ''), 'System32', 'cmd.exe')
-        if os.path.isabs(comspec):
-            return comspec
-        raise FileNotFoundError('shell not found: neither %ComSpec% nor %SystemRoot% is set')
-
-    def communicate_or_kill(self, *args, **kwargs):
-        try:
-            return self.communicate(*args, **kwargs)
-        except BaseException:  # Including KeyboardInterrupt
-            self.kill(timeout=None)
-            raise
-
-    def kill(self, *, timeout=0):
-        super().kill()
-        if timeout != 0:
-            self.wait(timeout=timeout)
-
-    @classmethod
-    def run(cls, *args, timeout=None, **kwargs):
-        with cls(*args, **kwargs) as proc:
-            default = '' if proc.__text_mode else b''
-            stdout, stderr = proc.communicate_or_kill(timeout=timeout)
-            return stdout or default, stderr or default, proc.returncode
 
 
 def encodeArgument(s):
@@ -1299,93 +1070,6 @@ else:
         def _unlock_file(f):
             raise LockingUnsupportedError
 
-
-class locked_file:
-    locked = False
-
-    def __init__(self, filename, mode, block=True, encoding=None):
-        if mode not in {'r', 'rb', 'a', 'ab', 'w', 'wb'}:
-            raise NotImplementedError(mode)
-        self.mode, self.block = mode, block
-
-        writable = any(f in mode for f in 'wax+')
-        readable = any(f in mode for f in 'r+')
-        flags = functools.reduce(operator.ior, (
-            getattr(os, 'O_CLOEXEC', 0),  # UNIX only
-            getattr(os, 'O_BINARY', 0),  # Windows only
-            getattr(os, 'O_NOINHERIT', 0),  # Windows only
-            os.O_CREAT if writable else 0,  # O_TRUNC only after locking
-            os.O_APPEND if 'a' in mode else 0,
-            os.O_EXCL if 'x' in mode else 0,
-            os.O_RDONLY if not writable else os.O_RDWR if readable else os.O_WRONLY,
-        ))
-
-        self.f = os.fdopen(os.open(filename, flags, 0o666), mode, encoding=encoding)
-
-    def __enter__(self):
-        exclusive = 'r' not in self.mode
-        try:
-            _lock_file(self.f, exclusive, self.block)
-            self.locked = True
-        except OSError:
-            self.f.close()
-            raise
-        if 'w' in self.mode:
-            try:
-                self.f.truncate()
-            except OSError as e:
-                if e.errno not in (
-                    errno.ESPIPE,  # Illegal seek - expected for FIFO
-                    errno.EINVAL,  # Invalid argument - expected for /dev/null
-                ):
-                    raise
-        return self
-
-    def unlock(self):
-        if not self.locked:
-            return
-        try:
-            _unlock_file(self.f)
-        finally:
-            self.locked = False
-
-    def __exit__(self, *_):
-        try:
-            self.unlock()
-        finally:
-            self.f.close()
-
-    open = __enter__
-    close = __exit__
-
-    def __getattr__(self, attr):
-        return getattr(self.f, attr)
-
-    def __iter__(self):
-        return iter(self.f)
-
-
-@functools.cache
-def get_filesystem_encoding():
-    encoding = sys.getfilesystemencoding()
-    return encoding if encoding is not None else 'utf-8'
-
-
-_WINDOWS_QUOTE_TRANS = str.maketrans(WINDOWS_QUOTE_TRANS)
-_CMD_QUOTE_TRANS = str.maketrans(CMD_QUOTE_TRANS)
-
-
-def shell_quote(args, *, shell=False):
-    args = list(variadic(args))
-
-    if os.name != 'nt':
-        return shlex.join(args)
-
-    trans = _CMD_QUOTE_TRANS if shell else _WINDOWS_QUOTE_TRANS
-    return ' '.join(
-        s if re.fullmatch(r'[\w#$*\-+./:?@\\]+', s, re.ASCII)
-        else re.sub(r'(\\+)("|$)', r'\1\1\2', s).translate(trans).join('""')
-        for s in args)
 
 
 def smuggle_url(url, data):
@@ -3822,19 +3506,6 @@ def jwt_decode_hs256(jwt):
     _header_b64, payload_b64, _signature_b64 = jwt.split('.')
     # add trailing ='s that may have been stripped, superfluous ='s are ignored
     return json.loads(base64.urlsafe_b64decode(f'{payload_b64}==='))
-
-
-@functools.cache
-def supports_terminal_sequences(stream):
-    if os.name == 'nt':
-        if not WINDOWS_VT_MODE.value:
-            return False
-    elif not os.getenv('TERM'):
-        return False
-    try:
-        return stream.isatty()
-    except BaseException:
-        return False
 
 
 def windows_enable_vt_mode():

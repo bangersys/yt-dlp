@@ -822,8 +822,19 @@ PREFERRED_SEARCH_IE = {
 }
 
 # Shell Quoting Constants
-CMD_QUOTE_TRANS = {ord('"'): r'\"', ord('\\'): r'\\'}
-WINDOWS_QUOTE_TRANS = {ord('"'): '""'}
+CMD_QUOTE_TRANS = {
+    # Keep quotes balanced by replacing them with `""` instead of `\\"`
+    ord('"'): '""',
+    # These require an env-variable `=` containing `"^\n\n"` (set in `utils.Popen`)
+    # `=` should be unique since variables containing `=` cannot be set using cmd
+    ord('\n'): '%=%',
+    ord('\r'): '%=%',
+    # Use zero length variable replacement so `%` doesn't get expanded
+    # `cd` is always set as long as extensions are enabled (`/E:ON` in `utils.Popen`)
+    ord('%'): '%%cd:~,%',
+}
+WINDOWS_QUOTE_TRANS = {ord('"'): R'\"'}
+
 
 # File Size Constants
 FILE_SIZE_UNITS = {

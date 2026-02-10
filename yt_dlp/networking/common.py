@@ -21,7 +21,8 @@ from .exceptions import (
     TransportError,
     UnsupportedRequest,
 )
-from ..cookies import YoutubeDLCookieJar
+if typing.TYPE_CHECKING:
+    from ..cookies import YoutubeDLCookieJar
 from ..utils import (
     bug_reports_message,
     classproperty,
@@ -238,7 +239,10 @@ class RequestHandler(abc.ABC):
 
         self._logger = logger
         self.headers = headers or {}
-        self.cookiejar = cookiejar if cookiejar is not None else YoutubeDLCookieJar()
+        if cookiejar is None:
+            from ..cookies import YoutubeDLCookieJar
+            cookiejar = YoutubeDLCookieJar()
+        self.cookiejar = cookiejar
         self.timeout = float(timeout or DEFAULT_TIMEOUT)
         self.proxies = proxies or {}
         self.source_address = source_address
@@ -332,6 +336,7 @@ class RequestHandler(abc.ABC):
 
     def _check_extensions(self, extensions):
         """Check extensions for unsupported extensions. Subclasses should extend this."""
+        from ..cookies import YoutubeDLCookieJar
         assert isinstance(extensions.get('cookiejar'), (YoutubeDLCookieJar, NoneType))
         assert isinstance(extensions.get('timeout'), (float, int, NoneType))
         assert isinstance(extensions.get('legacy_ssl'), (bool, NoneType))
