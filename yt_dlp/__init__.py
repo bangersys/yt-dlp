@@ -14,6 +14,7 @@ import os
 import re
 import traceback
 
+from .constants import SEARCH_EXAMPLES
 from .cookies import SUPPORTED_BROWSERS, SUPPORTED_KEYRINGS, CookieLoadError
 from .downloader.external import get_external_downloader
 from .extractor import list_extractor_classes
@@ -115,9 +116,8 @@ def print_extractor_information(opts, urls):
                 urls.update(dict.fromkeys(matched_urls, True))
             out += ''.join(f'  {url}\n' for url in matched_urls)
     elif opts.list_extractor_descriptions:
-        _SEARCHES = ('cute kittens', 'slithering pythons', 'falling cat', 'angry poodle', 'purple fish', 'running tortoise', 'sleeping bunny', 'burping cow')
         out = '\n'.join(
-            ie.description(markdown=False, search_examples=_SEARCHES)
+            ie.description(markdown=False, search_examples=SEARCH_EXAMPLES)
             for ie in list_extractor_classes(opts.age_limit) if ie.working() and ie.IE_DESC is not False)
     elif opts.ap_list_mso:
         out = 'Supported TV Providers:\n{}\n'.format(render_table(
