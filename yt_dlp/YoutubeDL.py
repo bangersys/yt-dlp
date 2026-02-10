@@ -72,15 +72,7 @@ from .postprocessor import (
     get_postprocessor,
 )
 from .postprocessor.ffmpeg import resolve_mapping as resolve_recode_mapping
-from .update import (
-    REPOSITORY,
-    _get_system_deprecation,
-    _get_outdated_warning,
-    _make_label,
-    current_git_head,
-    detect_variant,
-)
-from .utils import (
+from .constants import (
     DEFAULT_OUTTMPL,
     IDENTITY,
     LINK_TEMPLATES,
@@ -91,6 +83,16 @@ from .utils import (
     POSTPROCESS_WHEN,
     STR_FORMAT_RE_TMPL,
     STR_FORMAT_TYPES,
+)
+from .update import (
+    REPOSITORY,
+    _get_system_deprecation,
+    _get_outdated_warning,
+    _make_label,
+    current_git_head,
+    detect_variant,
+)
+from .utils import (
     ContentTooShortError,
     DateRange,
     DownloadCancelled,

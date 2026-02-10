@@ -44,7 +44,36 @@ import xml.etree.ElementTree
 
 from . import traversal
 
-from ..constants import CMD_QUOTE_TRANS, FILE_SIZE_UNITS, WINDOWS_QUOTE_TRANS
+from ..constants import (
+    ACCENT_CHARS,
+    BOMS,
+    CMD_QUOTE_TRANS,
+    COUNTRY_IP_MAP,
+    COUNTRY_MAP,
+    DATE_FORMATS,
+    DATE_FORMATS_DAY_FIRST,
+    DATE_FORMATS_MONTH_FIRST,
+    DEFAULT_OUTTMPL,
+    ENGLISH_MONTH_NAMES,
+    FILE_SIZE_UNITS,
+    IDENTITY,
+    JSON_LD_RE,
+    KNOWN_EXTENSIONS,
+    LINK_TEMPLATES,
+    MEDIA_EXTENSIONS,
+    MONTH_NAMES,
+    NO_DEFAULT,
+    NUMBER_RE,
+    OUTTMPL_TYPES,
+    PACKED_CODES_RE,
+    POSTPROCESS_WHEN,
+    STR_FORMAT_RE_TMPL,
+    STR_FORMAT_TYPES,
+    TIMEZONE_NAMES,
+    TV_PARENTAL_GUIDELINES,
+    US_RATINGS,
+    WINDOWS_QUOTE_TRANS,
+)
 
 from ..compat import (
     compat_datetime_from_timestamp,
@@ -60,118 +89,8 @@ from .exceptions import *
 __name__ = __name__.rsplit('.', 1)[0]  # noqa: A001 # Pretend to be the parent module
 
 
-class NO_DEFAULT:
-    pass
 
-
-def IDENTITY(x):
-    return x
-
-
-ENGLISH_MONTH_NAMES = [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December']
-
-MONTH_NAMES = {
-    'en': ENGLISH_MONTH_NAMES,
-    'fr': [
-        'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
-        'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'],
-    'is': [
-        'janúar', 'febrúar', 'mars', 'apríl', 'maí', 'júní',
-        'júlí', 'ágúst', 'september', 'október', 'nóvember', 'desember'],
-    # these follow the genitive grammatical case (dopełniacz)
-    # some websites might be using nominative, which will require another month list
-    # https://en.wikibooks.org/wiki/Polish/Noun_cases
-    'pl': ['stycznia', 'lutego', 'marca', 'kwietnia', 'maja', 'czerwca',
-           'lipca', 'sierpnia', 'września', 'października', 'listopada', 'grudnia'],
-}
-
-# From https://github.com/python/cpython/blob/3.11/Lib/email/_parseaddr.py#L36-L42
-TIMEZONE_NAMES = {
-    'UT': 0, 'UTC': 0, 'GMT': 0, 'Z': 0,
-    'AST': -4, 'ADT': -3,  # Atlantic (used in Canada)
-    'EST': -5, 'EDT': -4,  # Eastern
-    'CST': -6, 'CDT': -5,  # Central
-    'MST': -7, 'MDT': -6,  # Mountain
-    'PST': -8, 'PDT': -7,   # Pacific
-}
-
-# needed for sanitizing filenames in restricted mode
-ACCENT_CHARS = dict(zip('ÂÃÄÀÁÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖŐØŒÙÚÛÜŰÝÞßàáâãäåæçèéêëìíîïðñòóôõöőøœùúûüűýþÿ',
-                        itertools.chain('AAAAAA', ['AE'], 'CEEEEIIIIDNOOOOOOO', ['OE'], 'UUUUUY', ['TH', 'ss'],
-                                        'aaaaaa', ['ae'], 'ceeeeiiiionooooooo', ['oe'], 'uuuuuy', ['th'], 'y'), strict=True))
-
-DATE_FORMATS = (
-    '%d %B %Y',
-    '%d %b %Y',
-    '%B %d %Y',
-    '%B %dst %Y',
-    '%B %dnd %Y',
-    '%B %drd %Y',
-    '%B %dth %Y',
-    '%b %d %Y',
-    '%b %dst %Y',
-    '%b %dnd %Y',
-    '%b %drd %Y',
-    '%b %dth %Y',
-    '%b %dst %Y %I:%M',
-    '%b %dnd %Y %I:%M',
-    '%b %drd %Y %I:%M',
-    '%b %dth %Y %I:%M',
-    '%Y %m %d',
-    '%Y-%m-%d',
-    '%Y.%m.%d.',
-    '%Y/%m/%d',
-    '%Y/%m/%d %H:%M',
-    '%Y/%m/%d %H:%M:%S',
-    '%Y%m%d%H%M',
-    '%Y%m%d%H%M%S',
-    '%Y%m%d',
-    '%Y-%m-%d %H:%M',
-    '%Y-%m-%d %H:%M:%S',
-    '%Y-%m-%d %H:%M:%S.%f',
-    '%Y-%m-%d %H:%M:%S:%f',
-    '%d.%m.%Y %H:%M',
-    '%d.%m.%Y %H.%M',
-    '%Y-%m-%dT%H:%M:%SZ',
-    '%Y-%m-%dT%H:%M:%S.%fZ',
-    '%Y-%m-%dT%H:%M:%S.%f0Z',
-    '%Y-%m-%dT%H:%M:%S',
-    '%Y-%m-%dT%H:%M:%S.%f',
-    '%Y-%m-%dT%H:%M',
-    '%b %d %Y at %H:%M',
-    '%b %d %Y at %H:%M:%S',
-    '%B %d %Y at %H:%M',
-    '%B %d %Y at %H:%M:%S',
-    '%H:%M %d-%b-%Y',
-)
-
-DATE_FORMATS_DAY_FIRST = list(DATE_FORMATS)
-DATE_FORMATS_DAY_FIRST.extend([
-    '%d-%m-%Y',
-    '%d.%m.%Y',
-    '%d.%m.%y',
-    '%d/%m/%Y',
-    '%d/%m/%y',
-    '%d/%m/%Y %H:%M:%S',
-    '%d-%m-%Y %H:%M',
-    '%H:%M %d/%m/%Y',
-])
-
-DATE_FORMATS_MONTH_FIRST = list(DATE_FORMATS)
-DATE_FORMATS_MONTH_FIRST.extend([
-    '%m-%d-%Y',
-    '%m.%d.%Y',
-    '%m/%d/%Y',
-    '%m/%d/%y',
-    '%m/%d/%Y %H:%M:%S',
-])
-
-PACKED_CODES_RE = r"}\('(.+)',(\d+),(\d+),'([^']+)'\.split\('\|'\)"
-JSON_LD_RE = r'(?is)<script[^>]+type=(["\']?)application/ld\+json\1[^>]*>\s*(?P<json_ld>{.+?}|\[.+?\])\s*</script>'
-
-NUMBER_RE = r'\d+(?:\.\d+)?'
+# moved to constants.py
 
 
 @functools.cache
@@ -1510,12 +1429,13 @@ def lookup_unit_table(unit_table, s, strict=False):
     num_re = NUMBER_RE if strict else NUMBER_RE.replace(R'\.', '[,.]')
     units_re = '|'.join(re.escape(u) for u in unit_table)
     m = (re.fullmatch if strict else re.match)(
-        rf'(?P<num>{num_re})\s*(?P<unit>{units_re})\b', s)
+        rf'(?P<num>{num_re})\s*(?P<unit>{units_re})\b', s, flags=re.IGNORECASE)
     if not m:
         return None
 
+    unit_table = {u.upper(): v for u, v in unit_table.items()}
     num = float(m.group('num').replace(',', '.'))
-    mult = unit_table[m.group('unit')]
+    mult = unit_table[m.group('unit').upper()]
     return round(num * mult)
 
 
@@ -2409,25 +2329,6 @@ def encode_compat_str(string, encoding=preferredencoding(), errors='strict'):
     return string if isinstance(string, str) else str(string, encoding, errors)
 
 
-US_RATINGS = {
-    'G': 0,
-    'PG': 10,
-    'PG-13': 13,
-    'R': 16,
-    'NC': 18,
-}
-
-
-TV_PARENTAL_GUIDELINES = {
-    'TV-Y': 0,
-    'TV-Y7': 7,
-    'TV-G': 0,
-    'TV-PG': 0,
-    'TV-14': 14,
-    'TV-MA': 17,
-}
-
-
 def parse_age_limit(s):
     # isinstance(False, int) is True. So type() must be used instead
     if type(s) is int:  # noqa: E721
@@ -2548,45 +2449,8 @@ def qualities(quality_ids):
     return q
 
 
-POSTPROCESS_WHEN = ('pre_process', 'after_filter', 'video', 'before_dl', 'post_process', 'after_move', 'after_video', 'playlist')
 
-
-DEFAULT_OUTTMPL = {
-    'default': '%(title)s [%(id)s].%(ext)s',
-    'chapter': '%(title)s - %(section_number)03d %(section_title)s [%(id)s].%(ext)s',
-}
-OUTTMPL_TYPES = {
-    'chapter': None,
-    'subtitle': None,
-    'thumbnail': None,
-    'description': 'description',
-    'annotation': 'annotations.xml',
-    'infojson': 'info.json',
-    'link': None,
-    'pl_video': None,
-    'pl_thumbnail': None,
-    'pl_description': 'description',
-    'pl_infojson': 'info.json',
-}
-
-# As of [1] format syntax is:
-#  %[mapping_key][conversion_flags][minimum_width][.precision][length_modifier]type
-# 1. https://docs.python.org/2/library/stdtypes.html#string-formatting
-STR_FORMAT_RE_TMPL = r'''(?x)
-    (?<!%)(?P<prefix>(?:%%)*)
-    %
-    (?P<has_key>\((?P<key>{0})\))?
-    (?P<format>
-        (?P<conversion>[#0\-+ ]+)?
-        (?P<min_width>\d+)?
-        (?P<precision>\.\d+)?
-        (?P<len_mod>[hlL])?  # unused in python
-        {1}  # conversion type
-    )
-'''
-
-
-STR_FORMAT_TYPES = 'diouxXeEfFgGcrsa'
+# moved to constants.py
 
 
 def limit_length(s, length):
@@ -2847,14 +2711,8 @@ def age_restricted(content_limit, age_limit):
     return age_limit < content_limit
 
 
-# List of known byte-order-marks (BOM)
-BOMS = [
-    (b'\xef\xbb\xbf', 'utf-8'),
-    (b'\x00\x00\xfe\xff', 'utf-32-be'),
-    (b'\xff\xfe\x00\x00', 'utf-32-le'),
-    (b'\xff\xfe', 'utf-16-le'),
-    (b'\xfe\xff', 'utf-16-be'),
-]
+
+# moved to constants.py
 
 
 def is_html(first_bytes):
@@ -3530,260 +3388,7 @@ class ISO639Utils:
 
 class ISO3166Utils:
     # From http://data.okfn.org/data/core/country-list
-    _country_map = {
-        'AF': 'Afghanistan',
-        'AX': 'Åland Islands',
-        'AL': 'Albania',
-        'DZ': 'Algeria',
-        'AS': 'American Samoa',
-        'AD': 'Andorra',
-        'AO': 'Angola',
-        'AI': 'Anguilla',
-        'AQ': 'Antarctica',
-        'AG': 'Antigua and Barbuda',
-        'AR': 'Argentina',
-        'AM': 'Armenia',
-        'AW': 'Aruba',
-        'AU': 'Australia',
-        'AT': 'Austria',
-        'AZ': 'Azerbaijan',
-        'BS': 'Bahamas',
-        'BH': 'Bahrain',
-        'BD': 'Bangladesh',
-        'BB': 'Barbados',
-        'BY': 'Belarus',
-        'BE': 'Belgium',
-        'BZ': 'Belize',
-        'BJ': 'Benin',
-        'BM': 'Bermuda',
-        'BT': 'Bhutan',
-        'BO': 'Bolivia, Plurinational State of',
-        'BQ': 'Bonaire, Sint Eustatius and Saba',
-        'BA': 'Bosnia and Herzegovina',
-        'BW': 'Botswana',
-        'BV': 'Bouvet Island',
-        'BR': 'Brazil',
-        'IO': 'British Indian Ocean Territory',
-        'BN': 'Brunei Darussalam',
-        'BG': 'Bulgaria',
-        'BF': 'Burkina Faso',
-        'BI': 'Burundi',
-        'KH': 'Cambodia',
-        'CM': 'Cameroon',
-        'CA': 'Canada',
-        'CV': 'Cape Verde',
-        'KY': 'Cayman Islands',
-        'CF': 'Central African Republic',
-        'TD': 'Chad',
-        'CL': 'Chile',
-        'CN': 'China',
-        'CX': 'Christmas Island',
-        'CC': 'Cocos (Keeling) Islands',
-        'CO': 'Colombia',
-        'KM': 'Comoros',
-        'CG': 'Congo',
-        'CD': 'Congo, the Democratic Republic of the',
-        'CK': 'Cook Islands',
-        'CR': 'Costa Rica',
-        'CI': 'Côte d\'Ivoire',
-        'HR': 'Croatia',
-        'CU': 'Cuba',
-        'CW': 'Curaçao',
-        'CY': 'Cyprus',
-        'CZ': 'Czech Republic',
-        'DK': 'Denmark',
-        'DJ': 'Djibouti',
-        'DM': 'Dominica',
-        'DO': 'Dominican Republic',
-        'EC': 'Ecuador',
-        'EG': 'Egypt',
-        'SV': 'El Salvador',
-        'GQ': 'Equatorial Guinea',
-        'ER': 'Eritrea',
-        'EE': 'Estonia',
-        'ET': 'Ethiopia',
-        'FK': 'Falkland Islands (Malvinas)',
-        'FO': 'Faroe Islands',
-        'FJ': 'Fiji',
-        'FI': 'Finland',
-        'FR': 'France',
-        'GF': 'French Guiana',
-        'PF': 'French Polynesia',
-        'TF': 'French Southern Territories',
-        'GA': 'Gabon',
-        'GM': 'Gambia',
-        'GE': 'Georgia',
-        'DE': 'Germany',
-        'GH': 'Ghana',
-        'GI': 'Gibraltar',
-        'GR': 'Greece',
-        'GL': 'Greenland',
-        'GD': 'Grenada',
-        'GP': 'Guadeloupe',
-        'GU': 'Guam',
-        'GT': 'Guatemala',
-        'GG': 'Guernsey',
-        'GN': 'Guinea',
-        'GW': 'Guinea-Bissau',
-        'GY': 'Guyana',
-        'HT': 'Haiti',
-        'HM': 'Heard Island and McDonald Islands',
-        'VA': 'Holy See (Vatican City State)',
-        'HN': 'Honduras',
-        'HK': 'Hong Kong',
-        'HU': 'Hungary',
-        'IS': 'Iceland',
-        'IN': 'India',
-        'ID': 'Indonesia',
-        'IR': 'Iran, Islamic Republic of',
-        'IQ': 'Iraq',
-        'IE': 'Ireland',
-        'IM': 'Isle of Man',
-        'IL': 'Israel',
-        'IT': 'Italy',
-        'JM': 'Jamaica',
-        'JP': 'Japan',
-        'JE': 'Jersey',
-        'JO': 'Jordan',
-        'KZ': 'Kazakhstan',
-        'KE': 'Kenya',
-        'KI': 'Kiribati',
-        'KP': 'Korea, Democratic People\'s Republic of',
-        'KR': 'Korea, Republic of',
-        'KW': 'Kuwait',
-        'KG': 'Kyrgyzstan',
-        'LA': 'Lao People\'s Democratic Republic',
-        'LV': 'Latvia',
-        'LB': 'Lebanon',
-        'LS': 'Lesotho',
-        'LR': 'Liberia',
-        'LY': 'Libya',
-        'LI': 'Liechtenstein',
-        'LT': 'Lithuania',
-        'LU': 'Luxembourg',
-        'MO': 'Macao',
-        'MK': 'Macedonia, the Former Yugoslav Republic of',
-        'MG': 'Madagascar',
-        'MW': 'Malawi',
-        'MY': 'Malaysia',
-        'MV': 'Maldives',
-        'ML': 'Mali',
-        'MT': 'Malta',
-        'MH': 'Marshall Islands',
-        'MQ': 'Martinique',
-        'MR': 'Mauritania',
-        'MU': 'Mauritius',
-        'YT': 'Mayotte',
-        'MX': 'Mexico',
-        'FM': 'Micronesia, Federated States of',
-        'MD': 'Moldova, Republic of',
-        'MC': 'Monaco',
-        'MN': 'Mongolia',
-        'ME': 'Montenegro',
-        'MS': 'Montserrat',
-        'MA': 'Morocco',
-        'MZ': 'Mozambique',
-        'MM': 'Myanmar',
-        'NA': 'Namibia',
-        'NR': 'Nauru',
-        'NP': 'Nepal',
-        'NL': 'Netherlands',
-        'NC': 'New Caledonia',
-        'NZ': 'New Zealand',
-        'NI': 'Nicaragua',
-        'NE': 'Niger',
-        'NG': 'Nigeria',
-        'NU': 'Niue',
-        'NF': 'Norfolk Island',
-        'MP': 'Northern Mariana Islands',
-        'NO': 'Norway',
-        'OM': 'Oman',
-        'PK': 'Pakistan',
-        'PW': 'Palau',
-        'PS': 'Palestine, State of',
-        'PA': 'Panama',
-        'PG': 'Papua New Guinea',
-        'PY': 'Paraguay',
-        'PE': 'Peru',
-        'PH': 'Philippines',
-        'PN': 'Pitcairn',
-        'PL': 'Poland',
-        'PT': 'Portugal',
-        'PR': 'Puerto Rico',
-        'QA': 'Qatar',
-        'RE': 'Réunion',
-        'RO': 'Romania',
-        'RU': 'Russian Federation',
-        'RW': 'Rwanda',
-        'BL': 'Saint Barthélemy',
-        'SH': 'Saint Helena, Ascension and Tristan da Cunha',
-        'KN': 'Saint Kitts and Nevis',
-        'LC': 'Saint Lucia',
-        'MF': 'Saint Martin (French part)',
-        'PM': 'Saint Pierre and Miquelon',
-        'VC': 'Saint Vincent and the Grenadines',
-        'WS': 'Samoa',
-        'SM': 'San Marino',
-        'ST': 'Sao Tome and Principe',
-        'SA': 'Saudi Arabia',
-        'SN': 'Senegal',
-        'RS': 'Serbia',
-        'SC': 'Seychelles',
-        'SL': 'Sierra Leone',
-        'SG': 'Singapore',
-        'SX': 'Sint Maarten (Dutch part)',
-        'SK': 'Slovakia',
-        'SI': 'Slovenia',
-        'SB': 'Solomon Islands',
-        'SO': 'Somalia',
-        'ZA': 'South Africa',
-        'GS': 'South Georgia and the South Sandwich Islands',
-        'SS': 'South Sudan',
-        'ES': 'Spain',
-        'LK': 'Sri Lanka',
-        'SD': 'Sudan',
-        'SR': 'Suriname',
-        'SJ': 'Svalbard and Jan Mayen',
-        'SZ': 'Swaziland',
-        'SE': 'Sweden',
-        'CH': 'Switzerland',
-        'SY': 'Syrian Arab Republic',
-        'TW': 'Taiwan, Province of China',
-        'TJ': 'Tajikistan',
-        'TZ': 'Tanzania, United Republic of',
-        'TH': 'Thailand',
-        'TL': 'Timor-Leste',
-        'TG': 'Togo',
-        'TK': 'Tokelau',
-        'TO': 'Tonga',
-        'TT': 'Trinidad and Tobago',
-        'TN': 'Tunisia',
-        'TR': 'Turkey',
-        'TM': 'Turkmenistan',
-        'TC': 'Turks and Caicos Islands',
-        'TV': 'Tuvalu',
-        'UG': 'Uganda',
-        'UA': 'Ukraine',
-        'AE': 'United Arab Emirates',
-        'GB': 'United Kingdom',
-        'US': 'United States',
-        'UM': 'United States Minor Outlying Islands',
-        'UY': 'Uruguay',
-        'UZ': 'Uzbekistan',
-        'VU': 'Vanuatu',
-        'VE': 'Venezuela, Bolivarian Republic of',
-        'VN': 'Viet Nam',
-        'VG': 'Virgin Islands, British',
-        'VI': 'Virgin Islands, U.S.',
-        'WF': 'Wallis and Futuna',
-        'EH': 'Western Sahara',
-        'YE': 'Yemen',
-        'ZM': 'Zambia',
-        'ZW': 'Zimbabwe',
-        # Not ISO 3166 codes, but used for IP blocks
-        'AP': 'Asia/Pacific Region',
-        'EU': 'Europe',
-    }
+    _country_map = COUNTRY_MAP
 
     @classmethod
     def short2full(cls, code):
@@ -3793,248 +3398,7 @@ class ISO3166Utils:
 
 class GeoUtils:
     # Major IPv4 address blocks per country
-    _country_ip_map = {
-        'AD': '46.172.224.0/19',
-        'AE': '94.200.0.0/13',
-        'AF': '149.54.0.0/17',
-        'AG': '209.59.64.0/18',
-        'AI': '204.14.248.0/21',
-        'AL': '46.99.0.0/16',
-        'AM': '46.70.0.0/15',
-        'AO': '105.168.0.0/13',
-        'AP': '182.50.184.0/21',
-        'AQ': '23.154.160.0/24',
-        'AR': '181.0.0.0/12',
-        'AS': '202.70.112.0/20',
-        'AT': '77.116.0.0/14',
-        'AU': '1.128.0.0/11',
-        'AW': '181.41.0.0/18',
-        'AX': '185.217.4.0/22',
-        'AZ': '5.197.0.0/16',
-        'BA': '31.176.128.0/17',
-        'BB': '65.48.128.0/17',
-        'BD': '114.130.0.0/16',
-        'BE': '57.0.0.0/8',
-        'BF': '102.178.0.0/15',
-        'BG': '95.42.0.0/15',
-        'BH': '37.131.0.0/17',
-        'BI': '154.117.192.0/18',
-        'BJ': '137.255.0.0/16',
-        'BL': '185.212.72.0/23',
-        'BM': '196.12.64.0/18',
-        'BN': '156.31.0.0/16',
-        'BO': '161.56.0.0/16',
-        'BQ': '161.0.80.0/20',
-        'BR': '191.128.0.0/12',
-        'BS': '24.51.64.0/18',
-        'BT': '119.2.96.0/19',
-        'BW': '168.167.0.0/16',
-        'BY': '178.120.0.0/13',
-        'BZ': '179.42.192.0/18',
-        'CA': '99.224.0.0/11',
-        'CD': '41.243.0.0/16',
-        'CF': '197.242.176.0/21',
-        'CG': '160.113.0.0/16',
-        'CH': '85.0.0.0/13',
-        'CI': '102.136.0.0/14',
-        'CK': '202.65.32.0/19',
-        'CL': '152.172.0.0/14',
-        'CM': '102.244.0.0/14',
-        'CN': '36.128.0.0/10',
-        'CO': '181.240.0.0/12',
-        'CR': '201.192.0.0/12',
-        'CU': '152.206.0.0/15',
-        'CV': '165.90.96.0/19',
-        'CW': '190.88.128.0/17',
-        'CY': '31.153.0.0/16',
-        'CZ': '88.100.0.0/14',
-        'DE': '53.0.0.0/8',
-        'DJ': '197.241.0.0/17',
-        'DK': '87.48.0.0/12',
-        'DM': '192.243.48.0/20',
-        'DO': '152.166.0.0/15',
-        'DZ': '41.96.0.0/12',
-        'EC': '186.68.0.0/15',
-        'EE': '90.190.0.0/15',
-        'EG': '156.160.0.0/11',
-        'ER': '196.200.96.0/20',
-        'ES': '88.0.0.0/11',
-        'ET': '196.188.0.0/14',
-        'EU': '2.16.0.0/13',
-        'FI': '91.152.0.0/13',
-        'FJ': '144.120.0.0/16',
-        'FK': '80.73.208.0/21',
-        'FM': '119.252.112.0/20',
-        'FO': '88.85.32.0/19',
-        'FR': '90.0.0.0/9',
-        'GA': '41.158.0.0/15',
-        'GB': '25.0.0.0/8',
-        'GD': '74.122.88.0/21',
-        'GE': '31.146.0.0/16',
-        'GF': '161.22.64.0/18',
-        'GG': '62.68.160.0/19',
-        'GH': '154.160.0.0/12',
-        'GI': '95.164.0.0/16',
-        'GL': '88.83.0.0/19',
-        'GM': '160.182.0.0/15',
-        'GN': '197.149.192.0/18',
-        'GP': '104.250.0.0/19',
-        'GQ': '105.235.224.0/20',
-        'GR': '94.64.0.0/13',
-        'GT': '168.234.0.0/16',
-        'GU': '168.123.0.0/16',
-        'GW': '197.214.80.0/20',
-        'GY': '181.41.64.0/18',
-        'HK': '113.252.0.0/14',
-        'HN': '181.210.0.0/16',
-        'HR': '93.136.0.0/13',
-        'HT': '148.102.128.0/17',
-        'HU': '84.0.0.0/14',
-        'ID': '39.192.0.0/10',
-        'IE': '87.32.0.0/12',
-        'IL': '79.176.0.0/13',
-        'IM': '5.62.80.0/20',
-        'IN': '117.192.0.0/10',
-        'IO': '203.83.48.0/21',
-        'IQ': '37.236.0.0/14',
-        'IR': '2.176.0.0/12',
-        'IS': '82.221.0.0/16',
-        'IT': '79.0.0.0/10',
-        'JE': '87.244.64.0/18',
-        'JM': '72.27.0.0/17',
-        'JO': '176.29.0.0/16',
-        'JP': '133.0.0.0/8',
-        'KE': '105.48.0.0/12',
-        'KG': '158.181.128.0/17',
-        'KH': '36.37.128.0/17',
-        'KI': '103.25.140.0/22',
-        'KM': '197.255.224.0/20',
-        'KN': '198.167.192.0/19',
-        'KP': '175.45.176.0/22',
-        'KR': '175.192.0.0/10',
-        'KW': '37.36.0.0/14',
-        'KY': '64.96.0.0/15',
-        'KZ': '2.72.0.0/13',
-        'LA': '115.84.64.0/18',
-        'LB': '178.135.0.0/16',
-        'LC': '24.92.144.0/20',
-        'LI': '82.117.0.0/19',
-        'LK': '112.134.0.0/15',
-        'LR': '102.183.0.0/16',
-        'LS': '129.232.0.0/17',
-        'LT': '78.56.0.0/13',
-        'LU': '188.42.0.0/16',
-        'LV': '46.109.0.0/16',
-        'LY': '41.252.0.0/14',
-        'MA': '105.128.0.0/11',
-        'MC': '88.209.64.0/18',
-        'MD': '37.246.0.0/16',
-        'ME': '178.175.0.0/17',
-        'MF': '74.112.232.0/21',
-        'MG': '154.126.0.0/17',
-        'MH': '117.103.88.0/21',
-        'MK': '77.28.0.0/15',
-        'ML': '154.118.128.0/18',
-        'MM': '37.111.0.0/17',
-        'MN': '49.0.128.0/17',
-        'MO': '60.246.0.0/16',
-        'MP': '202.88.64.0/20',
-        'MQ': '109.203.224.0/19',
-        'MR': '41.188.64.0/18',
-        'MS': '208.90.112.0/22',
-        'MT': '46.11.0.0/16',
-        'MU': '105.16.0.0/12',
-        'MV': '27.114.128.0/18',
-        'MW': '102.70.0.0/15',
-        'MX': '187.192.0.0/11',
-        'MY': '175.136.0.0/13',
-        'MZ': '197.218.0.0/15',
-        'NA': '41.182.0.0/16',
-        'NC': '101.101.0.0/18',
-        'NE': '197.214.0.0/18',
-        'NF': '203.17.240.0/22',
-        'NG': '105.112.0.0/12',
-        'NI': '186.76.0.0/15',
-        'NL': '145.96.0.0/11',
-        'NO': '84.208.0.0/13',
-        'NP': '36.252.0.0/15',
-        'NR': '203.98.224.0/19',
-        'NU': '49.156.48.0/22',
-        'NZ': '49.224.0.0/14',
-        'OM': '5.36.0.0/15',
-        'PA': '186.72.0.0/15',
-        'PE': '186.160.0.0/14',
-        'PF': '123.50.64.0/18',
-        'PG': '124.240.192.0/19',
-        'PH': '49.144.0.0/13',
-        'PK': '39.32.0.0/11',
-        'PL': '83.0.0.0/11',
-        'PM': '70.36.0.0/20',
-        'PR': '66.50.0.0/16',
-        'PS': '188.161.0.0/16',
-        'PT': '85.240.0.0/13',
-        'PW': '202.124.224.0/20',
-        'PY': '181.120.0.0/14',
-        'QA': '37.210.0.0/15',
-        'RE': '102.35.0.0/16',
-        'RO': '79.112.0.0/13',
-        'RS': '93.86.0.0/15',
-        'RU': '5.136.0.0/13',
-        'RW': '41.186.0.0/16',
-        'SA': '188.48.0.0/13',
-        'SB': '202.1.160.0/19',
-        'SC': '154.192.0.0/11',
-        'SD': '102.120.0.0/13',
-        'SE': '78.64.0.0/12',
-        'SG': '8.128.0.0/10',
-        'SI': '188.196.0.0/14',
-        'SK': '78.98.0.0/15',
-        'SL': '102.143.0.0/17',
-        'SM': '89.186.32.0/19',
-        'SN': '41.82.0.0/15',
-        'SO': '154.115.192.0/18',
-        'SR': '186.179.128.0/17',
-        'SS': '105.235.208.0/21',
-        'ST': '197.159.160.0/19',
-        'SV': '168.243.0.0/16',
-        'SX': '190.102.0.0/20',
-        'SY': '5.0.0.0/16',
-        'SZ': '41.84.224.0/19',
-        'TC': '65.255.48.0/20',
-        'TD': '154.68.128.0/19',
-        'TG': '196.168.0.0/14',
-        'TH': '171.96.0.0/13',
-        'TJ': '85.9.128.0/18',
-        'TK': '27.96.24.0/21',
-        'TL': '180.189.160.0/20',
-        'TM': '95.85.96.0/19',
-        'TN': '197.0.0.0/11',
-        'TO': '175.176.144.0/21',
-        'TR': '78.160.0.0/11',
-        'TT': '186.44.0.0/15',
-        'TV': '202.2.96.0/19',
-        'TW': '120.96.0.0/11',
-        'TZ': '156.156.0.0/14',
-        'UA': '37.52.0.0/14',
-        'UG': '102.80.0.0/13',
-        'US': '6.0.0.0/8',
-        'UY': '167.56.0.0/13',
-        'UZ': '84.54.64.0/18',
-        'VA': '212.77.0.0/19',
-        'VC': '207.191.240.0/21',
-        'VE': '186.88.0.0/13',
-        'VG': '66.81.192.0/20',
-        'VI': '146.226.0.0/16',
-        'VN': '14.160.0.0/11',
-        'VU': '202.80.32.0/20',
-        'WF': '117.20.32.0/21',
-        'WS': '202.4.32.0/19',
-        'YE': '134.35.0.0/16',
-        'YT': '41.242.116.0/22',
-        'ZA': '41.0.0.0/11',
-        'ZM': '102.144.0.0/13',
-        'ZW': '102.177.192.0/18',
-    }
+    _country_ip_map = COUNTRY_IP_MAP
 
     @classmethod
     def random_ipv4(cls, code_or_block):
@@ -4284,37 +3648,8 @@ def find_available_port(interface=''):
         return None
 
 
-# Templates for internet shortcut files, which are plain text files.
-DOT_URL_LINK_TEMPLATE = '''\
-[InternetShortcut]
-URL=%(url)s
-'''
 
-DOT_WEBLOC_LINK_TEMPLATE = '''\
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-\t<key>URL</key>
-\t<string>%(url)s</string>
-</dict>
-</plist>
-'''
-
-DOT_DESKTOP_LINK_TEMPLATE = '''\
-[Desktop Entry]
-Encoding=UTF-8
-Name=%(filename)s
-Type=Link
-URL=%(url)s
-Icon=text-html
-'''
-
-LINK_TEMPLATES = {
-    'url': DOT_URL_LINK_TEMPLATE,
-    'desktop': DOT_DESKTOP_LINK_TEMPLATE,
-    'webloc': DOT_WEBLOC_LINK_TEMPLATE,
-}
+# moved to constants.py
 
 
 def iri_to_uri(iri):
@@ -4775,32 +4110,7 @@ class function_with_repr:
             return self.__repr
         return f'{self.func.__module__}.{self.func.__qualname__}'
 
-
-class Namespace(types.SimpleNamespace):
-    """Immutable namespace"""
-
-    def __iter__(self):
-        return iter(self.__dict__.values())
-
-    @property
-    def items_(self):
-        return self.__dict__.items()
-
-
-MEDIA_EXTENSIONS = Namespace(
-    common_video=('avi', 'flv', 'mkv', 'mov', 'mp4', 'webm'),
-    video=('3g2', '3gp', 'f4v', 'mk3d', 'divx', 'mpg', 'ogv', 'm4v', 'wmv'),
-    common_audio=('aiff', 'alac', 'flac', 'm4a', 'mka', 'mp3', 'ogg', 'opus', 'wav'),
-    audio=('aac', 'ape', 'asf', 'f4a', 'f4b', 'm4b', 'm4r', 'oga', 'ogx', 'spx', 'vorbis', 'wma', 'weba'),
-    thumbnails=('jpg', 'png', 'webp'),
-    storyboards=('mhtml', ),
-    subtitles=('srt', 'vtt', 'ass', 'lrc'),
-    manifests=('f4f', 'f4m', 'm3u8', 'smil', 'mpd'),
-)
-MEDIA_EXTENSIONS.video += MEDIA_EXTENSIONS.common_video
-MEDIA_EXTENSIONS.audio += MEDIA_EXTENSIONS.common_audio
-
-KNOWN_EXTENSIONS = (*MEDIA_EXTENSIONS.video, *MEDIA_EXTENSIONS.audio, *MEDIA_EXTENSIONS.manifests)
+# removed Namespace and MEDIA_EXTENSIONS (moved to constants.py)
 
 
 class _UnsafeExtensionError(Exception):

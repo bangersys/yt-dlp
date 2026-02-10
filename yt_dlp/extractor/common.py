@@ -38,10 +38,9 @@ from ..networking.exceptions import (
     TransportError,
     network_exceptions,
 )
+from ..constants import JSON_LD_RE, NO_DEFAULT
 from ..utils import (
     IDENTITY,
-    JSON_LD_RE,
-    NO_DEFAULT,
     ExtractorError,
     FormatSorter,
     GeoRestrictedError,

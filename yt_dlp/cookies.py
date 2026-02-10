@@ -25,7 +25,13 @@ from .aes import (
     aes_gcm_decrypt_and_verify_bytes,
     unpad_pkcs7,
 )
-from .constants import CHROMIUM_BASED_BROWSERS, SUPPORTED_BROWSERS
+from .constants import (
+    CHROMIUM_BASED_BROWSERS,
+    SUPPORTED_BROWSERS,
+    SUPPORTED_KEYRINGS,
+    _LinuxDesktopEnvironment,
+    _LinuxKeyring,
+)
 from .dependencies import (
     _SECRETSTORAGE_UNAVAILABLE_REASON,
     secretstorage,
@@ -733,40 +739,7 @@ def parse_safari_cookies(data, jar=None, logger=YDLLogger()):
     p.skip_to_end('footer')
     return jar
 
-
-class _LinuxDesktopEnvironment(Enum):
-    """
-    https://chromium.googlesource.com/chromium/src/+/refs/heads/main/base/nix/xdg_util.h
-    DesktopEnvironment
-    """
-    OTHER = auto()
-    CINNAMON = auto()
-    DEEPIN = auto()
-    GNOME = auto()
-    KDE3 = auto()
-    KDE4 = auto()
-    KDE5 = auto()
-    KDE6 = auto()
-    PANTHEON = auto()
-    UKUI = auto()
-    UNITY = auto()
-    XFCE = auto()
-    LXQT = auto()
-
-
-class _LinuxKeyring(Enum):
-    """
-    https://chromium.googlesource.com/chromium/src/+/refs/heads/main/components/os_crypt/sync/key_storage_util_linux.h
-    SelectedLinuxBackend
-    """
-    KWALLET = auto()  # KDE4
-    KWALLET5 = auto()
-    KWALLET6 = auto()
-    GNOMEKEYRING = auto()
-    BASICTEXT = auto()
-
-
-SUPPORTED_KEYRINGS = _LinuxKeyring.__members__.keys()
+# moved to constants.py
 
 
 def _get_linux_desktop_environment(env, logger):

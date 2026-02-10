@@ -10,10 +10,9 @@ import time
 
 from .common import PostProcessor
 from ..compat import imghdr
-from ..constants import ACODECS, EXT_TO_OUT_FORMATS
+from ..constants import ACODECS, EXT_TO_OUT_FORMATS, MEDIA_EXTENSIONS
 from ..utils import (
-    MEDIA_EXTENSIONS,
-    ISO639Utils,
+ISO639Utils,
     Popen,
     PostProcessingError,
     _get_exe_version_output,

@@ -14,8 +14,13 @@ import os
 import re
 import traceback
 
-from .constants import SEARCH_EXAMPLES
-from .cookies import SUPPORTED_BROWSERS, SUPPORTED_KEYRINGS, CookieLoadError
+from .constants import (
+    POSTPROCESS_WHEN,
+    SEARCH_EXAMPLES,
+    SUPPORTED_BROWSERS,
+    SUPPORTED_KEYRINGS,
+)
+from .cookies import CookieLoadError
 from .downloader.external import get_external_downloader
 from .extractor import list_extractor_classes
 from .extractor.adobepass import MSO_INFO
@@ -37,7 +42,6 @@ from .postprocessor import (
 from .update import Updater
 from .utils import (
     NO_DEFAULT,
-    POSTPROCESS_WHEN,
     DateRange,
     DownloadCancelled,
     DownloadError,

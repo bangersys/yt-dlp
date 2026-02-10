@@ -130,19 +130,19 @@ def current_git_head():
             return stdout.strip()
 
 
-_FILE_SUFFIXES = FILE_SUFFIXES
-_NON_UPDATEABLE_REASONS = NON_UPDATEABLE_REASONS
+
+# removed aliases
 
 
 def is_non_updateable():
     if UPDATE_HINT:
         return UPDATE_HINT
-    return _NON_UPDATEABLE_REASONS.get(
-        detect_variant(), _NON_UPDATEABLE_REASONS['unknown' if VARIANT else 'other'])
+    return NON_UPDATEABLE_REASONS.get(
+        detect_variant(), NON_UPDATEABLE_REASONS['unknown' if VARIANT else 'other'])
 
 
 def _get_binary_name():
-    return format_field(_FILE_SUFFIXES, detect_variant(), template='yt-dlp%s', ignore=None, default=None)
+    return format_field(FILE_SUFFIXES, detect_variant(), template='yt-dlp%s', ignore=None, default=None)
 
 
 def _get_system_deprecation():
