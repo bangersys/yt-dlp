@@ -96,13 +96,11 @@ def is_iterable_like(x, allowed_types=collections.abc.Iterable, blocked_types=NO
 
 
 def variadic(x, allowed_types=NO_DEFAULT):
-    if allowed_types is not NO_DEFAULT:
-        if not isinstance(allowed_types, (tuple, type)):
-            from ._utils import deprecation_warning
-            deprecation_warning('allowed_types should be a tuple or a type')
-            allowed_types = tuple(allowed_types)
-        return x if is_iterable_like(x, blocked_types=allowed_types) else (x, )
-    return x if is_iterable_like(x) else (x, )
+    if allowed_types is NO_DEFAULT:
+        allowed_types = (str, bytes, collections.abc.Mapping)
+    elif not isinstance(allowed_types, (tuple, type)):
+        allowed_types = tuple(allowed_types)
+    return x if isinstance(x, collections.abc.Iterable) and not isinstance(x, allowed_types) else (x, )
 
 
 @partial_application

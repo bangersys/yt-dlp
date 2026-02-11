@@ -18,7 +18,7 @@ _T = TypeVar('_T')
 HTTPHeaders = dict[str, str]
 
 
-def variadic(v: _T | Iterable[_T], allowed_types=(list, tuple)) -> _T | Iterable[_T]:
+def _variadic(v: _T | Iterable[_T], allowed_types=(list, tuple)) -> _T | Iterable[_T]:
     """Wrap ``v`` in a single-item tuple unless it already is a variadic container."""
     return v if isinstance(v, allowed_types) else (v,)
 
@@ -170,7 +170,6 @@ class InfoDict(TypedDict, total=False):
 
 __all__ = [
     'HTTPHeaders',
-    'variadic',
     'Namespace',
     'Thumbnail',
     'Subtitle',

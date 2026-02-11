@@ -1,8 +1,14 @@
 from __future__ import annotations
 
+import base64
+import codecs
 import collections
 import collections.abc
+import functools
+import inspect
+import json
 import random
+import re
 import typing
 import urllib.parse
 import urllib.request
@@ -11,9 +17,9 @@ if typing.TYPE_CHECKING:
     T = typing.TypeVar('T')
 
 from ..constants import CHROME_MAJOR_VERSION_RANGE, USER_AGENT_TMPL
-from ._utils import NO_DEFAULT
+from .json import NO_DEFAULT
 from .formatting import format_field, remove_start
-from .traversal import traverse_obj
+
 
 
 def random_user_agent():
@@ -252,4 +258,172 @@ def select_proxy(url, proxies):
         elif urllib.request.proxy_bypass(hostport):  # check system settings
             return
 
+    from .traversal import traverse_obj
     return traverse_obj(proxies, url_components.scheme or 'http', 'all')
+
+
+def partial_application(func):
+    """
+    Partially apply a function with arguments that are not provided.
+    This is a helper to allow functions to be used as decorators or called directly.
+    """
+    sig = inspect.signature(func)
+    required_args = [
+        param.name for param in sig.parameters.values()
+        if param.kind in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+        if param.default is inspect.Parameter.empty
+    ]
+
+    @functools.wraps(func)
+    def wrapped(*args, **kwargs):
+        if set(required_args[len(args):]).difference(kwargs):
+            return functools.partial(func, *args, **kwargs)
+        return func(*args, **kwargs)
+
+    return wrapped
+
+
+def extract_basic_auth(url):
+    parts = urllib.parse.urlsplit(url)
+    if parts.username is None:
+        return url, None
+    url = urllib.parse.urlunsplit(parts._replace(netloc=(
+        parts.hostname if parts.port is None
+        else f'{parts.hostname}:{parts.port}')))
+    auth_payload = base64.b64encode(
+        ('{}:{}'.format(parts.username, parts.password or '')).encode())
+    return url, f'Basic {auth_payload.decode()}'
+
+
+def smuggle_url(url, data):
+    """ Pass additional data in a URL for internal use. """
+
+    url, idata = unsmuggle_url(url, {})
+    data.update(idata)
+    sdata = urllib.parse.urlencode(
+        {'__youtubedl_smuggle': json.dumps(data)})
+    return url + '#' + sdata
+
+
+def unsmuggle_url(smug_url, default=None):
+    if '#__youtubedl_smuggle' not in smug_url:
+        return smug_url, default
+    url, _, sdata = smug_url.rpartition('#')
+    jsond = urllib.parse.parse_qs(sdata)['__youtubedl_smuggle'][0]
+    data = json.loads(jsond)
+    return url, data
+
+
+def get_domain(url):
+    """
+    This implementation is inconsistent, but is kept for compatibility.
+    Use this only for "webpage_url_domain"
+    """
+    return remove_start(urllib.parse.urlparse(url).netloc, 'www.') or None
+
+
+def url_basename(url):
+    path = urllib.parse.urlparse(url).path
+    return path.strip('/').split('/')[-1]
+
+
+def base_url(url):
+    return re.match(r'https?://[^?#]+/', url).group()
+
+
+@partial_application
+def urljoin(base, path):
+    if isinstance(path, bytes):
+        path = path.decode()
+    if not isinstance(path, str) or not path:
+        return None
+    if re.match(r'(?:[a-zA-Z][a-zA-Z0-9+-.]*:)?//', path):
+        return path
+    if isinstance(base, bytes):
+        base = base.decode()
+    if not isinstance(base, str) or not re.match(
+            r'^(?:https?:)?//', base):
+        return None
+    return urllib.parse.urljoin(base, path)
+
+
+def urlencode_postdata(*args, **kargs):
+    return urllib.parse.urlencode(*args, **kargs).encode('ascii')
+
+
+@partial_application
+def update_url(url, *, query_update=None, **kwargs):
+    """Replace URL components specified by kwargs
+       @param url           str or parse url tuple
+       @param query_update  update query
+       @returns             str
+    """
+    if isinstance(url, str):
+        if not kwargs and not query_update:
+            return url
+        else:
+            url = urllib.parse.urlparse(url)
+    if query_update:
+        assert 'query' not in kwargs, 'query_update and query cannot be specified at the same time'
+        kwargs['query'] = urllib.parse.urlencode({
+            **urllib.parse.parse_qs(url.query),
+            **query_update,
+        }, True)
+    return urllib.parse.urlunparse(url._replace(**kwargs))
+
+
+@partial_application
+def update_url_query(url, query):
+    return update_url(url, query_update=query)
+
+
+def _multipart_encode_impl(data, boundary):
+    content_type = f'multipart/form-data; boundary={boundary}'
+
+    out = b''
+    for k, v in data.items():
+        out += b'--' + boundary.encode('ascii') + b'\r\n'
+        if isinstance(k, str):
+            k = k.encode()
+        if isinstance(v, str):
+            v = v.encode()
+        # RFC 2047 requires non-ASCII field names to be encoded, while RFC 7578
+        # suggests sending UTF-8 directly. Firefox sends UTF-8, too
+        content = b'Content-Disposition: form-data; name="' + k + b'"\r\n\r\n' + v + b'\r\n'
+        if boundary.encode('ascii') in content:
+            raise ValueError('Boundary overlaps with data')
+        out += content
+
+    out += b'--' + boundary.encode('ascii') + b'--\r\n'
+
+    return out, content_type
+
+
+def multipart_encode(data, boundary=None):
+    """
+    Encode a dict to RFC 7578-compliant form-data
+
+    data:
+        A dict where keys and values can be either Unicode or bytes-like
+        objects.
+    boundary:
+        If specified a Unicode object, it's used as the boundary. Otherwise
+        a random boundary is generated.
+
+    Reference: https://tools.ietf.org/html/rfc7578
+    """
+    has_specified_boundary = boundary is not None
+
+    while True:
+        if boundary is None:
+            boundary = '---------------' + str(random.randrange(0x0fffffff, 0xffffffff))
+
+        try:
+            out, content_type = _multipart_encode_impl(data, boundary)
+            break
+        except ValueError:
+            if has_specified_boundary:
+                raise
+            boundary = None
+
+    return out, content_type

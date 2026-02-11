@@ -4,8 +4,8 @@ import traceback
 
 
 def bug_reports_message(before=';'):
-    from ...constants import Namespace
-    REPOSITORY = Namespace.REPOSITORY
+    from ...constants import REPOSITORY
+
 
     msg = (f'please report this issue on  https://github.com/{REPOSITORY}/issues?q= , '
            'filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U')

@@ -158,12 +158,12 @@ def unified_timestamp(date_str, day_first=True, tz_offset=0):
 
     for expression in date_formats(day_first):
         with contextlib.suppress(ValueError):
-            dt_ = dt.datetime.strptime(date_str, expression) - timezone + dt.timedelta(hours=pm_delta)
+            dt_ = dt.datetime.strptime(date_str, expression) - (timezone or dt.timedelta()) + dt.timedelta(hours=pm_delta)
             return calendar.timegm(dt_.timetuple())
 
     timetuple = email.utils.parsedate_tz(date_str)
     if timetuple:
-        return calendar.timegm(timetuple) + pm_delta * 3600 - int(timezone.total_seconds())
+        return calendar.timegm(timetuple) + pm_delta * 3600 - int((timezone or dt.timedelta()).total_seconds())
 
 
 def datetime_from_str(date_str, precision='auto', format='%Y%m%d'):
@@ -410,7 +410,17 @@ __all__ = [
     'srt_subtitles_timecode',
     'strftime_or_none',
     'time_seconds',
+    'timeconvert',
     'timetuple_from_msec',
     'unified_strdate',
     'unified_timestamp',
 ]
+
+
+def timeconvert(timestr):
+    """Convert RFC 2822 defined time string into system timestamp"""
+    timestamp = None
+    timetuple = email.utils.parsedate_tz(timestr)
+    if timetuple is not None:
+        timestamp = email.utils.mktime_tz(timetuple)
+    return timestamp

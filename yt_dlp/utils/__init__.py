@@ -16,6 +16,13 @@ from .subtitles import *
 from .progress import *
 from .version import *
 from .crypto import *
+from .cli import *
+from .download import *
+from .geo import *
+from .locking import *
+from .networking import *
+from .parsing import *
+from .text import *
 
 from ._utils import *
 from ._json import *

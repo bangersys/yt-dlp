@@ -80,9 +80,53 @@ from ..dependencies import xattr
 from ..globals import IN_CLI
 
 from .types import *
+from .datetime import (
+    DateRange,
+    date_formats,
+    date_from_str,
+    datetime_add_months,
+    datetime_from_str,
+    datetime_round,
+    extract_timezone,
+    formatSeconds,
+    hyphenate_date,
+    month_by_abbreviation,
+    month_by_name,
+    parse_duration,
+    parse_iso8601,
+    strftime_or_none,
+    timeconvert,
+    timetuple_from_msec,
+    unified_strdate,
+    unified_timestamp,
+)
+from .networking import (
+    base_url,
+    extract_basic_auth,
+    get_domain,
+    multipart_encode,
+    smuggle_url,
+    unsmuggle_url,
+    update_url,
+    update_url_query,
+    url_basename,
+    urlencode_postdata,
+    urljoin,
+)
+from .parsing import (
+    lookup_unit_table,
+    parse_age_limit,
+    parse_bitrate,
+    parse_bytes,
+    parse_count,
+    parse_filesize,
+    parse_qs,
+    parse_resolution,
+)
+from .locking import LockingUnsupportedError, locked_file
 from .formatting import preferredencoding, supports_terminal_sequences, variadic, write_string
 from .json import NO_DEFAULT
-from .math import lookup_unit_table, parse_filesize
+
 from .version import (
     detect_exe_version,
     get_exe_version,
@@ -241,28 +285,13 @@ from .filesystem import (
 # sanitize_open is imported above
 
 # sanitize_open is imported above
-def timeconvert(timestr):
-    """Convert RFC 2822 defined time string into system timestamp"""
-    timestamp = None
-    timetuple = email.utils.parsedate_tz(timestr)
-    if timetuple is not None:
-        timestamp = email.utils.mktime_tz(timetuple)
-    return timestamp
 
 
 
 
 
-def extract_basic_auth(url):
-    parts = urllib.parse.urlsplit(url)
-    if parts.username is None:
-        return url, None
-    url = urllib.parse.urlunsplit(parts._replace(netloc=(
-        parts.hostname if parts.port is None
-        else f'{parts.hostname}:{parts.port}')))
-    auth_payload = base64.b64encode(
-        ('{}:{}'.format(parts.username, parts.password or '')).encode())
-    return url, f'Basic {auth_payload.decode()}'
+
+
 
 
 
@@ -302,143 +331,14 @@ def encodeArgument(s):
     return s if isinstance(s, str) else s.decode('ascii')
 
 
-_timetuple = collections.namedtuple('Time', ('hours', 'minutes', 'seconds', 'milliseconds'))
 
-
-def timetuple_from_msec(msec):
-    secs, msec = divmod(msec, 1000)
-    mins, secs = divmod(secs, 60)
-    hrs, mins = divmod(mins, 60)
-    return _timetuple(hrs, mins, secs, msec)
-
-
-def formatSeconds(secs, delim=':', msec=False):
-    time = timetuple_from_msec(secs * 1000)
-    if time.hours:
-        ret = '%d%s%02d%s%02d' % (time.hours, delim, time.minutes, delim, time.seconds)
-    elif time.minutes:
-        ret = '%d%s%02d' % (time.minutes, delim, time.seconds)
-    else:
-        ret = '%d' % time.seconds
-    return '%s.%03d' % (ret, time.milliseconds) if msec else ret
 
 
 def is_path_like(f):
     return isinstance(f, (str, bytes, os.PathLike))
 
 
-def extract_timezone(date_str, default=None):
-    m = re.search(
-        r'''(?x)
-            ^.{8,}?                                              # >=8 char non-TZ prefix, if present
-            (?P<tz>Z|                                            # just the UTC Z, or
-                (?:(?<=.\b\d{4}|\b\d{2}:\d\d)|                   # preceded by 4 digits or hh:mm or
-                   (?<!.\b[a-zA-Z]{3}|[a-zA-Z]{4}|..\b\d\d))     # not preceded by 3 alpha word or >= 4 alpha or 2 digits
-                   [ ]?                                          # optional space
-                (?P<sign>\+|-)                                   # +/-
-                (?P<hours>[0-9]{2}):?(?P<minutes>[0-9]{2})       # hh[:]mm
-            $)
-        ''', date_str)
-    timezone = None
 
-    if not m:
-        m = re.search(r'\d{1,2}:\d{1,2}(?:\.\d+)?(?P<tz>\s*[A-Z]+)$', date_str)
-        timezone = TIMEZONE_NAMES.get(m and m.group('tz').strip())
-        if timezone is not None:
-            date_str = date_str[:-len(m.group('tz'))]
-            timezone = dt.timedelta(hours=timezone)
-    else:
-        date_str = date_str[:-len(m.group('tz'))]
-        if m.group('sign'):
-            sign = 1 if m.group('sign') == '+' else -1
-            timezone = dt.timedelta(
-                hours=sign * int(m.group('hours')),
-                minutes=sign * int(m.group('minutes')))
-
-    if timezone is None and default is not NO_DEFAULT:
-        timezone = default or dt.timedelta()
-
-    return timezone, date_str
-
-
-@partial_application
-def parse_iso8601(date_str, delimiter='T', timezone=None):
-    """ Return a UNIX timestamp from the given date """
-
-    if date_str is None:
-        return None
-
-    date_str = re.sub(r'\.[0-9]+', '', date_str)
-
-    timezone, date_str = extract_timezone(date_str, timezone)
-
-    with contextlib.suppress(ValueError, TypeError):
-        date_format = f'%Y-%m-%d{delimiter}%H:%M:%S'
-        dt_ = dt.datetime.strptime(date_str, date_format) - timezone
-        return calendar.timegm(dt_.timetuple())
-
-
-def date_formats(day_first=True):
-    return DATE_FORMATS_DAY_FIRST if day_first else DATE_FORMATS_MONTH_FIRST
-
-
-def unified_strdate(date_str, day_first=True):
-    """Return a string with the date in the format YYYYMMDD"""
-
-    if date_str is None:
-        return None
-    upload_date = None
-    # Replace commas
-    date_str = date_str.replace(',', ' ')
-    # Remove AM/PM + timezone
-    date_str = re.sub(r'(?i)\s*(?:AM|PM)(?:\s+[A-Z]+)?', '', date_str)
-    _, date_str = extract_timezone(date_str)
-
-    for expression in date_formats(day_first):
-        with contextlib.suppress(ValueError):
-            upload_date = dt.datetime.strptime(date_str, expression).strftime('%Y%m%d')
-    if upload_date is None:
-        timetuple = email.utils.parsedate_tz(date_str)
-        if timetuple:
-            with contextlib.suppress(ValueError):
-                upload_date = dt.datetime(*timetuple[:6]).strftime('%Y%m%d')
-    if upload_date is not None:
-        return str(upload_date)
-
-
-@partial_application
-def unified_timestamp(date_str, day_first=True, tz_offset=0):
-    if not isinstance(date_str, str):
-        return None
-
-    date_str = re.sub(r'\s+', ' ', re.sub(
-        r'(?i)[,|]|(mon|tues?|wed(nes)?|thu(rs)?|fri|sat(ur)?|sun)(day)?', '', date_str))
-
-    pm_delta = 12 if re.search(r'(?i)PM', date_str) else 0
-    timezone, date_str = extract_timezone(
-        date_str, default=dt.timedelta(hours=tz_offset) if tz_offset else None)
-
-    # Remove AM/PM + timezone
-    date_str = re.sub(r'(?i)\s*(?:AM|PM)(?:\s+[A-Z]+)?', '', date_str)
-
-    # Remove unrecognized timezones from ISO 8601 alike timestamps
-    m = re.search(r'\d{1,2}:\d{1,2}(?:\.\d+)?(?P<tz>\s*[A-Z]+)$', date_str)
-    if m:
-        date_str = date_str[:-len(m.group('tz'))]
-
-    # Python only supports microseconds, so remove nanoseconds
-    m = re.search(r'^([0-9]{4,}-[0-9]{1,2}-[0-9]{1,2}T[0-9]{1,2}:[0-9]{1,2}:[0-9]{1,2}\.[0-9]{6})[0-9]+$', date_str)
-    if m:
-        date_str = m.group(1)
-
-    for expression in date_formats(day_first):
-        with contextlib.suppress(ValueError):
-            dt_ = dt.datetime.strptime(date_str, expression) - timezone + dt.timedelta(hours=pm_delta)
-            return calendar.timegm(dt_.timetuple())
-
-    timetuple = email.utils.parsedate_tz(date_str)
-    if timetuple:
-        return calendar.timegm(timetuple) + pm_delta * 3600 - int(timezone.total_seconds())
 
 
 @partial_application
@@ -459,134 +359,7 @@ def determine_ext(url, default_ext='unknown_video'):
 from .subtitles import *
 
 
-def datetime_from_str(date_str, precision='auto', format='%Y%m%d'):
-    R"""
-    Return a datetime object from a string.
-    Supported format:
-        (now|today|yesterday|DATE)([+-]\d+(microsecond|second|minute|hour|day|week|month|year)s?)?
 
-    @param format       strftime format of DATE
-    @param precision    Round the datetime object: auto|microsecond|second|minute|hour|day
-                        auto: round to the unit provided in date_str (if applicable).
-    """
-    auto_precision = False
-    if precision == 'auto':
-        auto_precision = True
-        precision = 'microsecond'
-    today = datetime_round(dt.datetime.now(dt.timezone.utc), precision)
-    if date_str in ('now', 'today'):
-        return today
-    if date_str == 'yesterday':
-        return today - dt.timedelta(days=1)
-    match = re.match(
-        r'(?P<start>.+)(?P<sign>[+-])(?P<time>\d+)(?P<unit>microsecond|second|minute|hour|day|week|month|year)s?',
-        date_str)
-    if match is not None:
-        start_time = datetime_from_str(match.group('start'), precision, format)
-        time = int(match.group('time')) * (-1 if match.group('sign') == '-' else 1)
-        unit = match.group('unit')
-        if unit == 'month' or unit == 'year':
-            new_date = datetime_add_months(start_time, time * 12 if unit == 'year' else time)
-            unit = 'day'
-        else:
-            if unit == 'week':
-                unit = 'day'
-                time *= 7
-            delta = dt.timedelta(**{unit + 's': time})
-            new_date = start_time + delta
-        if auto_precision:
-            return datetime_round(new_date, unit)
-        return new_date
-
-    return datetime_round(dt.datetime.strptime(date_str, format), precision)
-
-
-def date_from_str(date_str, format='%Y%m%d', strict=False):
-    R"""
-    Return a date object from a string using datetime_from_str
-
-    @param strict  Restrict allowed patterns to "YYYYMMDD" and
-                   (now|today|yesterday)(-\d+(day|week|month|year)s?)?
-    """
-    if strict and not re.fullmatch(r'\d{8}|(now|today|yesterday)(-\d+(day|week|month|year)s?)?', date_str):
-        raise ValueError(f'Invalid date format "{date_str}"')
-    return datetime_from_str(date_str, precision='microsecond', format=format).date()
-
-
-def datetime_add_months(dt_, months):
-    """Increment/Decrement a datetime object by months."""
-    month = dt_.month + months - 1
-    year = dt_.year + month // 12
-    month = month % 12 + 1
-    day = min(dt_.day, calendar.monthrange(year, month)[1])
-    return dt_.replace(year, month, day)
-
-
-def datetime_round(dt_, precision='day'):
-    """
-    Round a datetime object's time to a specific precision
-    """
-    if precision == 'microsecond':
-        return dt_
-
-    time_scale = 1_000_000
-    unit_seconds = {
-        'day': 86400,
-        'hour': 3600,
-        'minute': 60,
-        'second': 1,
-    }
-    roundto = lambda x, n: ((x + n / 2) // n) * n
-    timestamp = roundto(calendar.timegm(dt_.timetuple()) + dt_.microsecond / time_scale, unit_seconds[precision])
-    return compat_datetime_from_timestamp(timestamp)
-
-
-def hyphenate_date(date_str):
-    """
-    Convert a date in 'YYYYMMDD' format to 'YYYY-MM-DD' format"""
-    match = re.match(r'^(\d\d\d\d)(\d\d)(\d\d)$', date_str)
-    if match is not None:
-        return '-'.join(match.groups())
-    else:
-        return date_str
-
-
-class DateRange:
-    """Represents a time interval between two dates"""
-
-    def __init__(self, start=None, end=None):
-        """start and end must be strings in the format accepted by date"""
-        if start is not None:
-            self.start = date_from_str(start, strict=True)
-        else:
-            self.start = dt.datetime.min.date()
-        if end is not None:
-            self.end = date_from_str(end, strict=True)
-        else:
-            self.end = dt.datetime.max.date()
-        if self.start > self.end:
-            raise ValueError(f'Date range: "{self}" , the start date must be before the end date')
-
-    @classmethod
-    def day(cls, day):
-        """Returns a range that only contains the given day"""
-        return cls(day, day)
-
-    def __contains__(self, date):
-        """Check if the date is in the range"""
-        if not isinstance(date, dt.date):
-            date = date_from_str(date)
-        return self.start <= date <= self.end
-
-    def __repr__(self):
-        return f'{__name__}.{type(self).__name__}({self.start.isoformat()!r}, {self.end.isoformat()!r})'
-
-    def __str__(self):
-        return f'{self.start} to {self.end}'
-
-    def __eq__(self, other):
-        return (isinstance(other, DateRange)
-                and self.start == other.start and self.end == other.end)
 
 
 @functools.cache
@@ -596,164 +369,14 @@ class DateRange:
 
 
 
-class LockingUnsupportedError(OSError):
-    msg = 'File locking is not supported'
 
-    def __init__(self):
-        super().__init__(self.msg)
 
 
 # Cross-platform file locking
-if sys.platform == 'win32':
-    import ctypes
-    import ctypes.wintypes
-    import msvcrt
-
-    class OVERLAPPED(ctypes.Structure):
-        _fields_ = [
-            ('Internal', ctypes.wintypes.LPVOID),
-            ('InternalHigh', ctypes.wintypes.LPVOID),
-            ('Offset', ctypes.wintypes.DWORD),
-            ('OffsetHigh', ctypes.wintypes.DWORD),
-            ('hEvent', ctypes.wintypes.HANDLE),
-        ]
-
-    kernel32 = ctypes.WinDLL('kernel32')
-    LockFileEx = kernel32.LockFileEx
-    LockFileEx.argtypes = [
-        ctypes.wintypes.HANDLE,     # hFile
-        ctypes.wintypes.DWORD,      # dwFlags
-        ctypes.wintypes.DWORD,      # dwReserved
-        ctypes.wintypes.DWORD,      # nNumberOfBytesToLockLow
-        ctypes.wintypes.DWORD,      # nNumberOfBytesToLockHigh
-        ctypes.POINTER(OVERLAPPED),  # Overlapped
-    ]
-    LockFileEx.restype = ctypes.wintypes.BOOL
-    UnlockFileEx = kernel32.UnlockFileEx
-    UnlockFileEx.argtypes = [
-        ctypes.wintypes.HANDLE,     # hFile
-        ctypes.wintypes.DWORD,      # dwReserved
-        ctypes.wintypes.DWORD,      # nNumberOfBytesToLockLow
-        ctypes.wintypes.DWORD,      # nNumberOfBytesToLockHigh
-        ctypes.POINTER(OVERLAPPED),  # Overlapped
-    ]
-    UnlockFileEx.restype = ctypes.wintypes.BOOL
-    whole_low = 0xffffffff
-    whole_high = 0x7fffffff
-
-    def _lock_file(f, exclusive, block):
-        overlapped = OVERLAPPED()
-        overlapped.Offset = 0
-        overlapped.OffsetHigh = 0
-        overlapped.hEvent = 0
-        f._lock_file_overlapped_p = ctypes.pointer(overlapped)
-
-        if not LockFileEx(msvcrt.get_osfhandle(f.fileno()),
-                          (0x2 if exclusive else 0x0) | (0x0 if block else 0x1),
-                          0, whole_low, whole_high, f._lock_file_overlapped_p):
-            # NB: No argument form of "ctypes.FormatError" does not work on PyPy
-            raise BlockingIOError(f'Locking file failed: {ctypes.FormatError(ctypes.GetLastError())!r}')
-
-    def _unlock_file(f):
-        assert f._lock_file_overlapped_p
-        handle = msvcrt.get_osfhandle(f.fileno())
-        if not UnlockFileEx(handle, 0, whole_low, whole_high, f._lock_file_overlapped_p):
-            raise OSError(f'Unlocking file failed: {ctypes.FormatError()!r}')
-
-else:
-    try:
-        import fcntl
-
-        def _lock_file(f, exclusive, block):
-            flags = fcntl.LOCK_EX if exclusive else fcntl.LOCK_SH
-            if not block:
-                flags |= fcntl.LOCK_NB
-            try:
-                fcntl.flock(f, flags)
-            except BlockingIOError:
-                raise
-            except OSError:  # AOSP does not have flock()
-                fcntl.lockf(f, flags)
-
-        def _unlock_file(f):
-            with contextlib.suppress(OSError):
-                return fcntl.flock(f, fcntl.LOCK_UN)
-            with contextlib.suppress(OSError):
-                return fcntl.lockf(f, fcntl.LOCK_UN)  # AOSP does not have flock()
-            return fcntl.flock(f, fcntl.LOCK_UN | fcntl.LOCK_NB)  # virtiofs needs LOCK_NB on unlocking
-
-    except ImportError:
-
-        def _lock_file(f, exclusive, block):
-            raise LockingUnsupportedError
-
-        def _unlock_file(f):
-            raise LockingUnsupportedError
 
 
-class locked_file:
-    locked = False
 
-    def __init__(self, filename, mode, block=True, encoding=None):
-        if mode not in {'r', 'rb', 'a', 'ab', 'w', 'wb'}:
-            raise NotImplementedError(mode)
-        self.mode, self.block = mode, block
 
-        writable = any(f in mode for f in 'wax+')
-        readable = any(f in mode for f in 'r+')
-        flags = functools.reduce(operator.ior, (
-            getattr(os, 'O_CLOEXEC', 0),  # UNIX only
-            getattr(os, 'O_BINARY', 0),  # Windows only
-            getattr(os, 'O_NOINHERIT', 0),  # Windows only
-            os.O_CREAT if writable else 0,  # O_TRUNC only after locking
-            os.O_APPEND if 'a' in mode else 0,
-            os.O_EXCL if 'x' in mode else 0,
-            os.O_RDONLY if not writable else os.O_RDWR if readable else os.O_WRONLY,
-        ))
-
-        self.f = os.fdopen(os.open(filename, flags, 0o666), mode, encoding=encoding)
-
-    def __enter__(self):
-        exclusive = 'r' not in self.mode
-        try:
-            _lock_file(self.f, exclusive, self.block)
-            self.locked = True
-        except OSError:
-            self.f.close()
-            raise
-        if 'w' in self.mode:
-            try:
-                self.f.truncate()
-            except OSError as e:
-                if e.errno not in (
-                    errno.ESPIPE,  # Illegal seek - expected for FIFO
-                    errno.EINVAL,  # Invalid argument - expected for /dev/null
-                ):
-                    raise
-        return self
-
-    def unlock(self):
-        if not self.locked:
-            return
-        try:
-            _unlock_file(self.f)
-        finally:
-            self.locked = False
-
-    def __exit__(self, *_):
-        try:
-            self.unlock()
-        finally:
-            self.f.close()
-
-    open = __enter__
-    close = __exit__
-
-    def __getattr__(self, attr):
-        return getattr(self.f, attr)
-
-    def __iter__(self):
-        return iter(self.f)
 
 
 @functools.cache
@@ -762,142 +385,13 @@ def get_filesystem_encoding():
     return encoding if encoding is not None else 'utf-8'
 
 
-def smuggle_url(url, data):
-    """ Pass additional data in a URL for internal use. """
-
-    url, idata = unsmuggle_url(url, {})
-    data.update(idata)
-    sdata = urllib.parse.urlencode(
-        {'__youtubedl_smuggle': json.dumps(data)})
-    return url + '#' + sdata
 
 
-def unsmuggle_url(smug_url, default=None):
-    if '#__youtubedl_smuggle' not in smug_url:
-        return smug_url, default
-    url, _, sdata = smug_url.rpartition('#')
-    jsond = urllib.parse.parse_qs(sdata)['__youtubedl_smuggle'][0]
-    data = json.loads(jsond)
-    return url, data
 
 
-def lookup_unit_table(unit_table, s, strict=False):
-    num_re = NUMBER_RE if strict else NUMBER_RE.replace(R'\.', '[,.]')
-    units_re = '|'.join(re.escape(u) for u in unit_table)
-    m = (re.fullmatch if strict else re.match)(
-        rf'(?P<num>{num_re})\s*(?P<unit>{units_re})\b', s, flags=re.IGNORECASE)
-    if not m:
-        return None
-
-    unit_table = {u.upper(): v for u, v in unit_table.items()}
-    num = float(m.group('num').replace(',', '.'))
-    mult = unit_table[m.group('unit').upper()]
-    return round(num * mult)
 
 
-def parse_bytes(s):
-    """Parse a string indicating a byte quantity into an integer"""
-    return lookup_unit_table(
-        {u: 1024**i for i, u in enumerate(['', *'KMGTPEZY'])},
-        s.upper(), strict=True)
 
-
-def parse_filesize(s):
-    if s is None:
-        return None
-
-    # The lower-case forms are of course incorrect and unofficial,
-    # but we support those too
-
-    return lookup_unit_table(FILE_SIZE_UNITS, s)
-
-
-def parse_count(s):
-    if s is None:
-        return None
-
-    s = re.sub(r'^[^\d]+\s', '', s).strip()
-
-    if re.match(r'^[\d,.]+$', s):
-        return str_to_int(s)
-
-    _UNIT_TABLE = {
-        'k': 1000,
-        'K': 1000,
-        'm': 1000 ** 2,
-        'M': 1000 ** 2,
-        'kk': 1000 ** 2,
-        'KK': 1000 ** 2,
-        'b': 1000 ** 3,
-        'B': 1000 ** 3,
-    }
-
-    ret = lookup_unit_table(_UNIT_TABLE, s)
-    if ret is not None:
-        return ret
-
-    mobj = re.match(r'([\d,.]+)(?:$|\s)', s)
-    if mobj:
-        return str_to_int(mobj.group(1))
-
-
-def parse_resolution(s, *, lenient=False):
-    if s is None:
-        return {}
-
-    if lenient:
-        mobj = re.search(r'(?P<w>\d+)\s*[xX×,]\s*(?P<h>\d+)', s)
-    else:
-        mobj = re.search(r'(?<![a-zA-Z0-9])(?P<w>\d+)\s*[xX×,]\s*(?P<h>\d+)(?![a-zA-Z0-9])', s)
-    if mobj:
-        return {
-            'width': int(mobj.group('w')),
-            'height': int(mobj.group('h')),
-        }
-
-    mobj = re.search(r'(?<![a-zA-Z0-9])(\d+)[pPiI](?![a-zA-Z0-9])', s)
-    if mobj:
-        return {'height': int(mobj.group(1))}
-
-    mobj = re.search(r'\b([48])[kK]\b', s)
-    if mobj:
-        return {'height': int(mobj.group(1)) * 540}
-
-    if lenient:
-        mobj = re.search(r'(?<!\d)(\d{2,5})w(?![a-zA-Z0-9])', s)
-        if mobj:
-            return {'width': int(mobj.group(1))}
-
-    return {}
-
-
-def parse_bitrate(s):
-    if not isinstance(s, str):
-        return
-    mobj = re.search(r'\b(\d+)\s*kbps', s)
-    if mobj:
-        return int(mobj.group(1))
-
-
-def month_by_name(name, lang='en'):
-    """ Return the number of a month by (locale-independently) English name """
-
-    month_names = MONTH_NAMES.get(lang, MONTH_NAMES['en'])
-
-    try:
-        return month_names.index(name) + 1
-    except ValueError:
-        return None
-
-
-def month_by_abbreviation(abbrev):
-    """ Return the number of a month by (locale-independently) English
-        abbreviations """
-
-    try:
-        return [s[:3] for s in ENGLISH_MONTH_NAMES].index(abbrev) + 1
-    except ValueError:
-        return None
 
 
 
@@ -930,107 +424,13 @@ def setproctitle(title):
         return  # Strange libc, just skip this
 
 
-def get_domain(url):
-    """
-    This implementation is inconsistent, but is kept for compatibility.
-    Use this only for "webpage_url_domain"
-    """
-    return remove_start(urllib.parse.urlparse(url).netloc, 'www.') or None
 
 
-def url_basename(url):
-    path = urllib.parse.urlparse(url).path
-    return path.strip('/').split('/')[-1]
 
 
-def base_url(url):
-    return re.match(r'https?://[^?#]+/', url).group()
 
 
-@partial_application
-def urljoin(base, path):
-    if isinstance(path, bytes):
-        path = path.decode()
-    if not isinstance(path, str) or not path:
-        return None
-    if re.match(r'(?:[a-zA-Z][a-zA-Z0-9+-.]*:)?//', path):
-        return path
-    if isinstance(base, bytes):
-        base = base.decode()
-    if not isinstance(base, str) or not re.match(
-            r'^(?:https?:)?//', base):
-        return None
-    return urllib.parse.urljoin(base, path)
 
-
-def strftime_or_none(timestamp, date_format='%Y%m%d', default=None):
-    datetime_object = None
-    try:
-        if isinstance(timestamp, (int, float)):  # unix timestamp
-            datetime_object = compat_datetime_from_timestamp(timestamp)
-        elif isinstance(timestamp, str):  # assume YYYYMMDD
-            datetime_object = dt.datetime.strptime(timestamp, '%Y%m%d')
-        date_format = re.sub(  # Support %s on windows
-            r'(?<!%)(%%)*%s', rf'\g<1>{int(datetime_object.timestamp())}', date_format)
-        return datetime_object.strftime(date_format)
-    except (ValueError, TypeError, AttributeError, OverflowError, OSError):
-        return default
-
-
-def parse_duration(s):
-    if not isinstance(s, str):
-        return None
-    s = s.strip()
-    if not s:
-        return None
-
-    days, hours, mins, secs, ms = [None] * 5
-    m = re.match(r'''(?x)
-            (?P<before_secs>
-                (?:(?:(?P<days>[0-9]+):)?(?P<hours>[0-9]+):)?(?P<mins>[0-9]+):)?
-            (?P<secs>(?(before_secs)[0-9]{1,2}|[0-9]+))
-            (?P<ms>[.:][0-9]+)?Z?$
-        ''', s)
-    if m:
-        days, hours, mins, secs, ms = m.group('days', 'hours', 'mins', 'secs', 'ms')
-    else:
-        m = re.match(
-            r'''(?ix)(?:P?
-                (?:
-                    [0-9]+\s*y(?:ears?)?,?\s*
-                )?
-                (?:
-                    [0-9]+\s*m(?:onths?)?,?\s*
-                )?
-                (?:
-                    [0-9]+\s*w(?:eeks?)?,?\s*
-                )?
-                (?:
-                    (?P<days>[0-9]+)\s*d(?:ays?)?,?\s*
-                )?
-                T)?
-                (?:
-                    (?P<hours>[0-9]+)\s*h(?:(?:ou)?rs?)?,?\s*
-                )?
-                (?:
-                    (?P<mins>[0-9]+)\s*m(?:in(?:ute)?s?)?,?\s*
-                )?
-                (?:
-                    (?P<secs>[0-9]+)(?P<ms>\.[0-9]+)?\s*s(?:ec(?:ond)?s?)?\s*
-                )?Z?$''', s)
-        if m:
-            days, hours, mins, secs, ms = m.groups()
-        else:
-            m = re.match(r'(?i)(?:(?P<hours>[0-9.]+)\s*(?:hours?)|(?P<mins>[0-9.]+)\s*(?:mins?\.?|minutes?)\s*)Z?$', s)
-            if m:
-                hours, mins = m.groups()
-            else:
-                return None
-
-    if ms:
-        ms = ms.replace(':', '.')
-    return sum(float(part or 0) * mult for part, mult in (
-        (days, 86400), (hours, 3600), (mins, 60), (secs, 1), (ms, 1)))
 
 
 def _change_extension(prepend, filename, ext, expected_real_ext=None):
@@ -1209,24 +609,10 @@ class PlaylistEntries:
         pass
 
 
-def uppercase_escape(s):
-    unicode_escape = codecs.getdecoder('unicode_escape')
-    return re.sub(
-        r'\\U[0-9a-fA-F]{8}',
-        lambda m: unicode_escape(m.group(0))[0],
-        s)
 
 
-def lowercase_escape(s):
-    unicode_escape = codecs.getdecoder('unicode_escape')
-    return re.sub(
-        r'\\u[0-9a-fA-F]{4}',
-        lambda m: unicode_escape(m.group(0))[0],
-        s)
 
 
-def parse_qs(url, **kwargs):
-    return urllib.parse.parse_qs(urllib.parse.urlparse(url).query, **kwargs)
 
 
 def read_batch_urls(batch_fd):
@@ -1248,86 +634,7 @@ def read_batch_urls(batch_fd):
         return [url for url in map(fixup, fd) if url]
 
 
-def urlencode_postdata(*args, **kargs):
-    return urllib.parse.urlencode(*args, **kargs).encode('ascii')
 
-
-@partial_application
-def update_url(url, *, query_update=None, **kwargs):
-    """Replace URL components specified by kwargs
-       @param url           str or parse url tuple
-       @param query_update  update query
-       @returns             str
-    """
-    if isinstance(url, str):
-        if not kwargs and not query_update:
-            return url
-        else:
-            url = urllib.parse.urlparse(url)
-    if query_update:
-        assert 'query' not in kwargs, 'query_update and query cannot be specified at the same time'
-        kwargs['query'] = urllib.parse.urlencode({
-            **urllib.parse.parse_qs(url.query),
-            **query_update,
-        }, True)
-    return urllib.parse.urlunparse(url._replace(**kwargs))
-
-
-@partial_application
-def update_url_query(url, query):
-    return update_url(url, query_update=query)
-
-
-def _multipart_encode_impl(data, boundary):
-    content_type = f'multipart/form-data; boundary={boundary}'
-
-    out = b''
-    for k, v in data.items():
-        out += b'--' + boundary.encode('ascii') + b'\r\n'
-        if isinstance(k, str):
-            k = k.encode()
-        if isinstance(v, str):
-            v = v.encode()
-        # RFC 2047 requires non-ASCII field names to be encoded, while RFC 7578
-        # suggests sending UTF-8 directly. Firefox sends UTF-8, too
-        content = b'Content-Disposition: form-data; name="' + k + b'"\r\n\r\n' + v + b'\r\n'
-        if boundary.encode('ascii') in content:
-            raise ValueError('Boundary overlaps with data')
-        out += content
-
-    out += b'--' + boundary.encode('ascii') + b'--\r\n'
-
-    return out, content_type
-
-
-def multipart_encode(data, boundary=None):
-    """
-    Encode a dict to RFC 7578-compliant form-data
-
-    data:
-        A dict where keys and values can be either Unicode or bytes-like
-        objects.
-    boundary:
-        If specified a Unicode object, it's used as the boundary. Otherwise
-        a random boundary is generated.
-
-    Reference: https://tools.ietf.org/html/rfc7578
-    """
-    has_specified_boundary = boundary is not None
-
-    while True:
-        if boundary is None:
-            boundary = '---------------' + str(random.randrange(0x0fffffff, 0xffffffff))
-
-        try:
-            out, content_type = _multipart_encode_impl(data, boundary)
-            break
-        except ValueError:
-            if has_specified_boundary:
-                raise
-            boundary = None
-
-    return out, content_type
 
 
 def try_call(*funcs, expected_type=None, args=[], kwargs={}):
@@ -1363,22 +670,7 @@ def encode_compat_str(string, encoding=preferredencoding(), errors='strict'):
     return string if isinstance(string, str) else str(string, encoding, errors)
 
 
-def parse_age_limit(s):
-    # isinstance(False, int) is True. So type() must be used instead
-    if type(s) is int:  # noqa: E721
-        return s if 0 <= s <= 21 else None
-    elif not isinstance(s, str):
-        return None
-    m = re.match(r'^(?P<age>\d{1,2})\+?$', s)
-    if m:
-        return int(m.group('age'))
-    s = s.upper()
-    if s in US_RATINGS:
-        return US_RATINGS[s]
-    m = re.match(r'^TV[_-]?({})$'.format('|'.join(k[3:] for k in TV_PARENTAL_GUIDELINES)), s)
-    if m:
-        return TV_PARENTAL_GUIDELINES['TV-' + m.group(1)]
-    return None
+
 
 
 def strip_jsonp(code):
@@ -1487,14 +779,7 @@ def qualities(quality_ids):
 # moved to constants.py
 
 
-def limit_length(s, length):
-    """ Add ellipses to overly long strings """
-    if s is None:
-        return None
-    ELLIPSES = '...'
-    if len(s) > length:
-        return s[:length - len(ELLIPSES)] + ELLIPSES
-    return s
+
 
 
 
