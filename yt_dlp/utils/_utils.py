@@ -81,12 +81,9 @@ from ..dependencies import xattr
 from ..globals import IN_CLI
 
 from .exceptions import *
-from .formatting import preferredencoding, supports_terminal_sequences, write_string
-from .json import NO_DEFAULT
-from .formatting import preferredencoding, supports_terminal_sequences, write_string
+from .formatting import preferredencoding, supports_terminal_sequences, variadic, write_string
 from .json import NO_DEFAULT
 from .math import lookup_unit_table, parse_filesize
-from .types import variadic
 
 __name__ = __name__.rsplit('.', 1)[0]  # noqa: A001 # Pretend to be the parent module
 
@@ -925,13 +922,7 @@ def system_identifier():
     )
 
 
-@functools.cache
-def get_windows_version():
-    """ Get Windows version. returns () if it's not running on Windows """
-    if os.name == 'nt':
-        return version_tuple(platform.win32_ver()[1])
-    else:
-        return ()
+
 
 
 
@@ -2074,9 +2065,7 @@ def limit_length(s, length):
     return s
 
 
-def version_tuple(v, *, lenient=False):
-    parse = int_or_none(default=-1) if lenient else int
-    return tuple(parse(e) for e in re.split(r'[-.]', v))
+
 
 
 def is_outdated_version(version, limit, assume_new=True):
@@ -3078,54 +3067,7 @@ def pkcs1pad(data, length):
     return [0, 2, *pseudo_random, 0, *data]
 
 
-def _base_n_table(n, table):
-    if not table and not n:
-        raise ValueError('Either table or n must be specified')
-    table = (table or '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ')[:n]
 
-    if n and n != len(table):
-        raise ValueError(f'base {n} exceeds table length {len(table)}')
-    return table
-
-
-def encode_base_n(num, n=None, table=None):
-    """Convert given int to a base-n string"""
-    table = _base_n_table(n, table)
-    if not num:
-        return table[0]
-
-    result, base = '', len(table)
-    while num:
-        result = table[num % base] + result
-        num = num // base
-    return result
-
-
-def decode_base_n(string, n=None, table=None):
-    """Convert given base-n string to int"""
-    table = {char: index for index, char in enumerate(_base_n_table(n, table))}
-    result, base = 0, len(table)
-    for char in string:
-        result = result * base + table[char]
-    return result
-
-
-def decode_packed_codes(code):
-    mobj = re.search(PACKED_CODES_RE, code)
-    obfuscated_code, base, count, symbols = mobj.groups()
-    base = int(base)
-    count = int(count)
-    symbols = symbols.split('|')
-    symbol_table = {}
-
-    while count:
-        count -= 1
-        base_n_count = encode_base_n(count, base)
-        symbol_table[base_n_count] = symbols[count] or base_n_count
-
-    return re.sub(
-        r'\b(\w+)\b', lambda m: symbol_table.get(m.group(0), m.group(0)),
-        obfuscated_code)
 
 
 def caesar(s, alphabet, shift):
