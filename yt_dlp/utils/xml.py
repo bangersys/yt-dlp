@@ -24,7 +24,7 @@ def xpath_with_ns(path, ns_map):
 
 
 def xpath_element(node, xpath, name=None, fatal=False, default=NO_DEFAULT):
-    from .exceptions import ExtractorError  # Local import to avoid circular dependency
+    from .types.exceptions import ExtractorError  # Local import to avoid circular dependency
 
     def _find_xpath(xpath):
         return node.find(xpath)
@@ -51,7 +51,7 @@ def xpath_element(node, xpath, name=None, fatal=False, default=NO_DEFAULT):
 
 
 def xpath_text(node, xpath, name=None, fatal=False, default=NO_DEFAULT):
-    from .exceptions import ExtractorError
+    from .types.exceptions import ExtractorError
 
     n = xpath_element(node, xpath, name, fatal=fatal, default=default)
     if n is None or n == default:
@@ -68,7 +68,7 @@ def xpath_text(node, xpath, name=None, fatal=False, default=NO_DEFAULT):
 
 
 def xpath_attr(node, xpath, key, name=None, fatal=False, default=NO_DEFAULT):
-    from .exceptions import ExtractorError
+    from .types.exceptions import ExtractorError
 
     n = find_xpath_attr(node, xpath, key)
     if n is None:

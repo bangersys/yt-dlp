@@ -15,17 +15,19 @@ from ..postprocessor.ffmpeg import EXT_TO_OUT_FORMATS, FFmpegPostProcessor
 from ..utils import (
     Popen,
     RetryManager,
-    _configuration_args,
     check_executable,
     classproperty,
-    cli_bool_option,
-    cli_option,
-    cli_valueless_option,
     determine_ext,
     encodeArgument,
     find_available_port,
     remove_end,
     traverse_obj,
+)
+from ..utils.cli import (
+    _configuration_args,
+    cli_bool_option,
+    cli_option,
+    cli_valueless_option,
 )
 
 

@@ -7,9 +7,9 @@ from ..networking.exceptions import HTTPError, network_exceptions
 from ..utils import (
     PostProcessingError,
     RetryManager,
-    _configuration_args,
     deprecation_warning,
 )
+from ..utils.cli import _configuration_args
 from ..utils.progress import _ProgressState
 
 

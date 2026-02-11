@@ -261,7 +261,7 @@ class function_with_repr:
         return f'{self.func.__module__}.{self.func.__qualname__}'
 
 
-from ..constants import Namespace
+from ...constants import Namespace
 
 
 class RetryManager:
@@ -280,12 +280,12 @@ class RetryManager:
         self.error_callback = functools.partial(_error_callback, **kwargs)
 
     def _should_retry(self):
-        from ..constants import NO_DEFAULT
+        from ...constants import NO_DEFAULT
         return self._error is not NO_DEFAULT and self.attempt <= self.retries
 
     @property
     def error(self):
-        from ..constants import NO_DEFAULT
+        from ...constants import NO_DEFAULT
         if self._error is NO_DEFAULT:
             return None
         return self._error
@@ -295,7 +295,7 @@ class RetryManager:
         self._error = value
 
     def __iter__(self):
-        from ..constants import NO_DEFAULT
+        from ...constants import NO_DEFAULT
         while self._should_retry():
             self.error = NO_DEFAULT
             self.attempt += 1
@@ -307,7 +307,7 @@ class RetryManager:
     def report_retry(e, count, retries, *, sleep_func, info, warn, error=None, suffix=None):
         """Utility function for reporting retries"""
         from .exceptions import ExtractorError
-        from .formatting import format_field, remove_end, str_or_none, float_or_none
+        from ..formatting import format_field, remove_end, str_or_none, float_or_none
 
         if count > retries:
             if error:
@@ -326,10 +326,209 @@ class RetryManager:
             time.sleep(delay)
 
 
-def variadic(x, allowed_types=(str, bytes)):
-    if x is None:
-        return
-    if isinstance(x, collections.abc.Iterable) and not isinstance(x, allowed_types):
-        yield from x
-    else:
-        yield x
+
+
+class ISO639Utils:
+    # See http://www.loc.gov/standards/iso639-2/ISO-639-2_utf-8.txt
+    _lang_map = {
+        'aa': 'aar',
+        'ab': 'abk',
+        'ae': 'ave',
+        'af': 'afr',
+        'ak': 'aka',
+        'am': 'amh',
+        'an': 'arg',
+        'ar': 'ara',
+        'as': 'asm',
+        'av': 'ava',
+        'ay': 'aym',
+        'az': 'aze',
+        'ba': 'bak',
+        'be': 'bel',
+        'bg': 'bul',
+        'bh': 'bih',
+        'bi': 'bis',
+        'bm': 'bam',
+        'bn': 'ben',
+        'bo': 'bod',
+        'br': 'bre',
+        'bs': 'bos',
+        'ca': 'cat',
+        'ce': 'che',
+        'ch': 'cha',
+        'co': 'cos',
+        'cr': 'cre',
+        'cs': 'ces',
+        'cu': 'chu',
+        'cv': 'chv',
+        'cy': 'cym',
+        'da': 'dan',
+        'de': 'deu',
+        'dv': 'div',
+        'dz': 'dzo',
+        'ee': 'ewe',
+        'el': 'ell',
+        'en': 'eng',
+        'eo': 'epo',
+        'es': 'spa',
+        'et': 'est',
+        'eu': 'eus',
+        'fa': 'fas',
+        'ff': 'ful',
+        'fi': 'fin',
+        'fj': 'fij',
+        'fo': 'fao',
+        'fr': 'fra',
+        'fy': 'fry',
+        'ga': 'gle',
+        'gd': 'gla',
+        'gl': 'glg',
+        'gn': 'grn',
+        'gu': 'guj',
+        'gv': 'glv',
+        'ha': 'hau',
+        'he': 'heb',
+        'iw': 'heb',  # Replaced by he in 1989 revision
+        'hi': 'hin',
+        'ho': 'hmo',
+        'hr': 'hrv',
+        'ht': 'hat',
+        'hu': 'hun',
+        'hy': 'hye',
+        'hz': 'her',
+        'ia': 'ina',
+        'id': 'ind',
+        'in': 'ind',  # Replaced by id in 1989 revision
+        'ie': 'ile',
+        'ig': 'ibo',
+        'ii': 'iii',
+        'ik': 'ipk',
+        'io': 'ido',
+        'is': 'isl',
+        'it': 'ita',
+        'iu': 'iku',
+        'ja': 'jpn',
+        'jv': 'jav',
+        'ka': 'kat',
+        'kg': 'kon',
+        'ki': 'kik',
+        'kj': 'kua',
+        'kk': 'kaz',
+        'kl': 'kal',
+        'km': 'khm',
+        'kn': 'kan',
+        'ko': 'kor',
+        'kr': 'kau',
+        'ks': 'kas',
+        'ku': 'kur',
+        'kv': 'kom',
+        'kw': 'cor',
+        'ky': 'kir',
+        'la': 'lat',
+        'lb': 'ltz',
+        'lg': 'lug',
+        'li': 'lim',
+        'ln': 'lin',
+        'lo': 'lao',
+        'lt': 'lit',
+        'lu': 'lub',
+        'lv': 'lav',
+        'mg': 'mlg',
+        'mh': 'mah',
+        'mi': 'mri',
+        'mk': 'mkd',
+        'ml': 'mal',
+        'mn': 'mon',
+        'mr': 'mar',
+        'ms': 'msa',
+        'mt': 'mlt',
+        'my': 'mya',
+        'na': 'nau',
+        'nb': 'nob',
+        'nd': 'nde',
+        'ne': 'nep',
+        'ng': 'ndo',
+        'nl': 'nld',
+        'nn': 'nno',
+        'no': 'nor',
+        'nr': 'nbl',
+        'nv': 'nav',
+        'ny': 'nya',
+        'oc': 'oci',
+        'oj': 'oji',
+        'om': 'orm',
+        'or': 'ori',
+        'os': 'oss',
+        'pa': 'pan',
+        'pe': 'per',
+        'pi': 'pli',
+        'pl': 'pol',
+        'ps': 'pus',
+        'pt': 'por',
+        'qu': 'que',
+        'rm': 'roh',
+        'rn': 'run',
+        'ro': 'ron',
+        'ru': 'rus',
+        'rw': 'kin',
+        'sa': 'san',
+        'sc': 'srd',
+        'sd': 'snd',
+        'se': 'sme',
+        'sg': 'sag',
+        'si': 'sin',
+        'sk': 'slk',
+        'sl': 'slv',
+        'sm': 'smo',
+        'sn': 'sna',
+        'so': 'som',
+        'sq': 'sqi',
+        'sr': 'srp',
+        'ss': 'ssw',
+        'st': 'sot',
+        'su': 'sun',
+        'sv': 'swe',
+        'sw': 'swa',
+        'ta': 'tam',
+        'te': 'tel',
+        'tg': 'tgk',
+        'th': 'tha',
+        'ti': 'tir',
+        'tk': 'tuk',
+        'tl': 'tgl',
+        'tn': 'tsn',
+        'to': 'ton',
+        'tr': 'tur',
+        'ts': 'tso',
+        'tt': 'tat',
+        'tw': 'twi',
+        'ty': 'tah',
+        'ug': 'uig',
+        'uk': 'ukr',
+        'ur': 'urd',
+        'uz': 'uzb',
+        've': 'ven',
+        'vi': 'vie',
+        'vo': 'vol',
+        'wa': 'wln',
+        'wo': 'wol',
+        'xh': 'xho',
+        'yi': 'yid',
+        'ji': 'yid',  # Replaced by yi in 1989 revision
+        'yo': 'yor',
+        'za': 'zha',
+        'zh': 'zho',
+        'zu': 'zul',
+    }
+
+    @classmethod
+    def short2long(cls, code):
+        """Convert language code from ISO 639-1 to ISO 639-2/T"""
+        return cls._lang_map.get(code[:2])
+
+    @classmethod
+    def long2short(cls, code):
+        """Convert language code from ISO 639-2/T to ISO 639-1"""
+        for short_name, long_name in cls._lang_map.items():
+            if long_name == code:
+                return short_name

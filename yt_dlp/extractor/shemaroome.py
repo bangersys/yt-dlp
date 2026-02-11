@@ -1,7 +1,7 @@
 import base64
 
 from .common import InfoExtractor
-from ..aes import aes_cbc_decrypt_bytes, unpad_pkcs7
+from ..utils.crypto import aes_cbc_decrypt_bytes, unpad_pkcs7
 from ..utils import (
     ExtractorError,
     unified_strdate,

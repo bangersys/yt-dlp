@@ -6,7 +6,7 @@ import random
 import time
 
 from .common import InfoExtractor
-from ..aes import aes_cbc_decrypt_bytes, unpad_pkcs7
+from ..utils.crypto import aes_cbc_decrypt_bytes, unpad_pkcs7
 from ..networking.exceptions import HTTPError
 from ..utils import (
     ExtractorError,

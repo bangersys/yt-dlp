@@ -4,7 +4,7 @@ import string
 import time
 
 from .common import InfoExtractor
-from ..aes import aes_cbc_encrypt_bytes
+from ..utils.crypto import aes_cbc_encrypt_bytes
 from ..utils import (
     ExtractorError,
     determine_ext,

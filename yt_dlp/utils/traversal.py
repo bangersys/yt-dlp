@@ -24,7 +24,7 @@ from ._utils import (
     url_or_none,
     variadic,
 )
-from .datatypes import LazyList
+from .types import LazyList
 
 
 class HTMLBreakOnClosingTagParser(html.parser.HTMLParser):

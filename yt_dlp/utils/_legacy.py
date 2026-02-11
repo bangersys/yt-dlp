@@ -7,7 +7,8 @@ import urllib.parse
 import urllib.request
 import zlib
 
-from ._utils import Popen, decode_base_n
+from ._utils import Popen
+from .math import decode_base_n
 from .formatting import preferredencoding
 from .traversal import traverse_obj
 from ..dependencies import certifi, websockets

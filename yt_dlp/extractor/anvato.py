@@ -6,7 +6,7 @@ import re
 import time
 
 from .common import InfoExtractor
-from ..aes import aes_encrypt
+from ..utils.crypto import aes_encrypt
 from ..utils import (
     determine_ext,
     int_or_none,

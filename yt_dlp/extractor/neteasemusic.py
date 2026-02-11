@@ -6,7 +6,7 @@ import re
 import time
 
 from .common import InfoExtractor
-from ..aes import aes_ecb_encrypt, pkcs7_padding
+from ..utils.crypto import aes_ecb_encrypt, pkcs7_padding
 from ..utils import (
     ExtractorError,
     int_or_none,

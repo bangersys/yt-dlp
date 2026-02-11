@@ -1,5 +1,5 @@
 import base64
-from .datatypes import *
+from .types import *
 import binascii
 import calendar
 import codecs
@@ -79,7 +79,7 @@ from ..compat import (
 from ..dependencies import xattr
 from ..globals import IN_CLI
 
-from .exceptions import *
+from .types import *
 from .formatting import preferredencoding, supports_terminal_sequences, variadic, write_string
 from .json import NO_DEFAULT
 from .math import lookup_unit_table, parse_filesize
@@ -1080,7 +1080,7 @@ class PlaylistEntries:
 
         # _entries must be assigned now since infodict can change during iteration
         entries = info_dict.get('entries')
-        from .datatypes import LazyList
+        from .types import LazyList
         if entries is None:
             raise EntryNotInPlaylist('There are no entries')
         elif isinstance(entries, list):
@@ -1166,7 +1166,7 @@ class PlaylistEntries:
         else:
             def get_entry(i):
                 try:
-                    from .datatypes import LazyList
+                    from .types import LazyList
                     return type(self.ydl)._handle_extraction_exceptions(lambda _, i: self._entries[i])(self.ydl, i)
                 except (LazyList.IndexError, PagedList.IndexError):
                     raise self.IndexError
@@ -1912,260 +1912,8 @@ def match_filter_func(filters, breaking_filters=None):
 
 
 
-def cli_option(params, command_option, param, separator=None):
-    param = params.get(param)
-    return ([] if param is None
-            else [command_option, str(param)] if separator is None
-            else [f'{command_option}{separator}{param}'])
 
 
-def cli_bool_option(params, command_option, param, true_value='true', false_value='false', separator=None):
-    param = params.get(param)
-    assert param in (True, False, None)
-    return cli_option({True: true_value, False: false_value}, command_option, param, separator)
-
-
-def cli_valueless_option(params, command_option, param, expected_value=True):
-    return [command_option] if params.get(param) == expected_value else []
-
-
-def cli_configuration_args(argdict, keys, default=[], use_compat=True):
-    if isinstance(argdict, (list, tuple)):  # for backward compatibility
-        if use_compat:
-            return argdict
-        else:
-            argdict = None
-    if argdict is None:
-        return default
-    assert isinstance(argdict, dict)
-
-    assert isinstance(keys, (list, tuple))
-    for key_list in keys:
-        arg_list = list(filter(
-            lambda x: x is not None,
-            [argdict.get(key.lower()) for key in variadic(key_list)]))
-        if arg_list:
-            return [arg for args in arg_list for arg in args]
-    return default
-
-
-def _configuration_args(main_key, argdict, exe, keys=None, default=[], use_compat=True):
-    main_key, exe = main_key.lower(), exe.lower()
-    root_key = exe if main_key == exe else f'{main_key}+{exe}'
-    keys = [f'{root_key}{k}' for k in (keys or [''])]
-    if root_key in keys:
-        if main_key != exe:
-            keys.append((main_key, exe))
-        keys.append('default')
-    else:
-        use_compat = False
-    return cli_configuration_args(argdict, keys, default, use_compat)
-
-
-class ISO639Utils:
-    # See http://www.loc.gov/standards/iso639-2/ISO-639-2_utf-8.txt
-    _lang_map = {
-        'aa': 'aar',
-        'ab': 'abk',
-        'ae': 'ave',
-        'af': 'afr',
-        'ak': 'aka',
-        'am': 'amh',
-        'an': 'arg',
-        'ar': 'ara',
-        'as': 'asm',
-        'av': 'ava',
-        'ay': 'aym',
-        'az': 'aze',
-        'ba': 'bak',
-        'be': 'bel',
-        'bg': 'bul',
-        'bh': 'bih',
-        'bi': 'bis',
-        'bm': 'bam',
-        'bn': 'ben',
-        'bo': 'bod',
-        'br': 'bre',
-        'bs': 'bos',
-        'ca': 'cat',
-        'ce': 'che',
-        'ch': 'cha',
-        'co': 'cos',
-        'cr': 'cre',
-        'cs': 'ces',
-        'cu': 'chu',
-        'cv': 'chv',
-        'cy': 'cym',
-        'da': 'dan',
-        'de': 'deu',
-        'dv': 'div',
-        'dz': 'dzo',
-        'ee': 'ewe',
-        'el': 'ell',
-        'en': 'eng',
-        'eo': 'epo',
-        'es': 'spa',
-        'et': 'est',
-        'eu': 'eus',
-        'fa': 'fas',
-        'ff': 'ful',
-        'fi': 'fin',
-        'fj': 'fij',
-        'fo': 'fao',
-        'fr': 'fra',
-        'fy': 'fry',
-        'ga': 'gle',
-        'gd': 'gla',
-        'gl': 'glg',
-        'gn': 'grn',
-        'gu': 'guj',
-        'gv': 'glv',
-        'ha': 'hau',
-        'he': 'heb',
-        'iw': 'heb',  # Replaced by he in 1989 revision
-        'hi': 'hin',
-        'ho': 'hmo',
-        'hr': 'hrv',
-        'ht': 'hat',
-        'hu': 'hun',
-        'hy': 'hye',
-        'hz': 'her',
-        'ia': 'ina',
-        'id': 'ind',
-        'in': 'ind',  # Replaced by id in 1989 revision
-        'ie': 'ile',
-        'ig': 'ibo',
-        'ii': 'iii',
-        'ik': 'ipk',
-        'io': 'ido',
-        'is': 'isl',
-        'it': 'ita',
-        'iu': 'iku',
-        'ja': 'jpn',
-        'jv': 'jav',
-        'ka': 'kat',
-        'kg': 'kon',
-        'ki': 'kik',
-        'kj': 'kua',
-        'kk': 'kaz',
-        'kl': 'kal',
-        'km': 'khm',
-        'kn': 'kan',
-        'ko': 'kor',
-        'kr': 'kau',
-        'ks': 'kas',
-        'ku': 'kur',
-        'kv': 'kom',
-        'kw': 'cor',
-        'ky': 'kir',
-        'la': 'lat',
-        'lb': 'ltz',
-        'lg': 'lug',
-        'li': 'lim',
-        'ln': 'lin',
-        'lo': 'lao',
-        'lt': 'lit',
-        'lu': 'lub',
-        'lv': 'lav',
-        'mg': 'mlg',
-        'mh': 'mah',
-        'mi': 'mri',
-        'mk': 'mkd',
-        'ml': 'mal',
-        'mn': 'mon',
-        'mr': 'mar',
-        'ms': 'msa',
-        'mt': 'mlt',
-        'my': 'mya',
-        'na': 'nau',
-        'nb': 'nob',
-        'nd': 'nde',
-        'ne': 'nep',
-        'ng': 'ndo',
-        'nl': 'nld',
-        'nn': 'nno',
-        'no': 'nor',
-        'nr': 'nbl',
-        'nv': 'nav',
-        'ny': 'nya',
-        'oc': 'oci',
-        'oj': 'oji',
-        'om': 'orm',
-        'or': 'ori',
-        'os': 'oss',
-        'pa': 'pan',
-        'pe': 'per',
-        'pi': 'pli',
-        'pl': 'pol',
-        'ps': 'pus',
-        'pt': 'por',
-        'qu': 'que',
-        'rm': 'roh',
-        'rn': 'run',
-        'ro': 'ron',
-        'ru': 'rus',
-        'rw': 'kin',
-        'sa': 'san',
-        'sc': 'srd',
-        'sd': 'snd',
-        'se': 'sme',
-        'sg': 'sag',
-        'si': 'sin',
-        'sk': 'slk',
-        'sl': 'slv',
-        'sm': 'smo',
-        'sn': 'sna',
-        'so': 'som',
-        'sq': 'sqi',
-        'sr': 'srp',
-        'ss': 'ssw',
-        'st': 'sot',
-        'su': 'sun',
-        'sv': 'swe',
-        'sw': 'swa',
-        'ta': 'tam',
-        'te': 'tel',
-        'tg': 'tgk',
-        'th': 'tha',
-        'ti': 'tir',
-        'tk': 'tuk',
-        'tl': 'tgl',
-        'tn': 'tsn',
-        'to': 'ton',
-        'tr': 'tur',
-        'ts': 'tso',
-        'tt': 'tat',
-        'tw': 'twi',
-        'ty': 'tah',
-        'ug': 'uig',
-        'uk': 'ukr',
-        'ur': 'urd',
-        'uz': 'uzb',
-        've': 'ven',
-        'vi': 'vie',
-        'vo': 'vol',
-        'wa': 'wln',
-        'wo': 'wol',
-        'xh': 'xho',
-        'yi': 'yid',
-        'ji': 'yid',  # Replaced by yi in 1989 revision
-        'yo': 'yor',
-        'za': 'zha',
-        'zh': 'zho',
-        'zu': 'zul',
-    }
-
-    @classmethod
-    def short2long(cls, code):
-        """Convert language code from ISO 639-1 to ISO 639-2/T"""
-        return cls._lang_map.get(code[:2])
-
-    @classmethod
-    def long2short(cls, code):
-        """Convert language code from ISO 639-2/T to ISO 639-1"""
-        for short_name, long_name in cls._lang_map.items():
-            if long_name == code:
-                return short_name
 
 
 # ISO3166Utils and GeoUtils moved to yt_dlp.utils.geo
@@ -2176,99 +1924,7 @@ from .geo import GeoUtils, ISO3166Utils
 # released into Public Domain
 # https://github.com/dlitz/pycrypto/blob/master/lib/Crypto/Util/number.py#L387
 
-def long_to_bytes(n, blocksize=0):
-    """long_to_bytes(n:long, blocksize:int) : string
-    Convert a long integer to a byte string.
-
-    If optional blocksize is given and greater than zero, pad the front of the
-    byte string with binary zeros so that the length is a multiple of
-    blocksize.
-    """
-    # after much testing, this algorithm was deemed to be the fastest
-    s = b''
-    n = int(n)
-    while n > 0:
-        s = struct.pack('>I', n & 0xffffffff) + s
-        n = n >> 32
-    # strip off leading zeros
-    for i in range(len(s)):
-        if s[i] != b'\000'[0]:
-            break
-    else:
-        # only happens when n == 0
-        s = b'\000'
-        i = 0
-    s = s[i:]
-    # add back some pad bytes.  this could be done more efficiently w.r.t. the
-    # de-padding being done above, but sigh...
-    if blocksize > 0 and len(s) % blocksize:
-        s = (blocksize - len(s) % blocksize) * b'\000' + s
-    return s
-
-
-def bytes_to_long(s):
-    """bytes_to_long(string) : long
-    Convert a byte string to a long integer.
-
-    This is (essentially) the inverse of long_to_bytes().
-    """
-    acc = 0
-    length = len(s)
-    if length % 4:
-        extra = (4 - length % 4)
-        s = b'\000' * extra + s
-        length = length + extra
-    for i in range(0, length, 4):
-        acc = (acc << 32) + struct.unpack('>I', s[i:i + 4])[0]
-    return acc
-
-
-def ohdave_rsa_encrypt(data, exponent, modulus):
-    """
-    Implement OHDave's RSA algorithm. See http://www.ohdave.com/rsa/
-
-    Input:
-        data: data to encrypt, bytes-like object
-        exponent, modulus: parameter e and N of RSA algorithm, both integer
-    Output: hex string of encrypted data
-
-    Limitation: supports one block encryption only
-    """
-
-    payload = int(binascii.hexlify(data[::-1]), 16)
-    encrypted = pow(payload, exponent, modulus)
-    return f'{encrypted:x}'
-
-
-def pkcs1pad(data, length):
-    """
-    Padding input data with PKCS#1 scheme
-
-    @param {int[]} data        input data
-    @param {int}   length      target length
-    @returns {int[]}           padded data
-    """
-    if len(data) > length - 11:
-        raise ValueError('Input data too long for PKCS#1 padding')
-
-    pseudo_random = [random.randint(0, 254) for _ in range(length - len(data) - 3)]
-    return [0, 2, *pseudo_random, 0, *data]
-
-
-
-
-
-def caesar(s, alphabet, shift):
-    if shift == 0:
-        return s
-    l = len(alphabet)
-    return ''.join(
-        alphabet[(alphabet.index(c) + shift) % l] if c in alphabet else c
-        for c in s)
-
-
-def rot47(s):
-    return caesar(s, r'''!"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abcdefghijklmnopqrstuvwxyz{|}~''', 47)
+from .crypto import *
 
 
 def parse_m3u8_attributes(attrib):
@@ -2279,9 +1935,6 @@ def parse_m3u8_attributes(attrib):
         info[key] = val
     return info
 
-
-def urshift(val, n):
-    return val >> n if val >= 0 else (val + 0x100000000) >> n
 
 
 def write_xattr(path, key, value):
@@ -2489,41 +2142,9 @@ def time_seconds(**kwargs):
 
 # implemented following JWT https://www.rfc-editor.org/rfc/rfc7519.html
 # implemented following JWS https://www.rfc-editor.org/rfc/rfc7515.html
-def jwt_encode(payload_data, key, *, alg='HS256', headers=None):
-    assert alg in ('HS256',), f'Unsupported algorithm "{alg}"'
-
-    def jwt_json_bytes(obj):
-        return json.dumps(obj, separators=(',', ':')).encode()
-
-    def jwt_b64encode(bytestring):
-        return base64.urlsafe_b64encode(bytestring).rstrip(b'=')
-
-    header_data = {
-        'alg': alg,
-        'typ': 'JWT',
-    }
-    if headers:
-        # Allow re-ordering of keys if both 'alg' and 'typ' are present
-        if 'alg' in headers and 'typ' in headers:
-            header_data = headers
-        else:
-            header_data.update(headers)
-
-    header_b64 = jwt_b64encode(jwt_json_bytes(header_data))
-    payload_b64 = jwt_b64encode(jwt_json_bytes(payload_data))
-
-    # HS256 is the only algorithm currently supported
-    h = hmac.new(key.encode(), header_b64 + b'.' + payload_b64, hashlib.sha256)
-    signature_b64 = jwt_b64encode(h.digest())
-
-    return (header_b64 + b'.' + payload_b64 + b'.' + signature_b64).decode()
 
 
 # can be extended in future to verify the signature and parse header and return the algorithm used if it's not HS256
-def jwt_decode_hs256(jwt):
-    _header_b64, payload_b64, _signature_b64 = jwt.split('.')
-    # add trailing ='s that may have been stripped, superfluous ='s are ignored
-    return json.loads(base64.urlsafe_b64decode(f'{payload_b64}==='))
 
 
 

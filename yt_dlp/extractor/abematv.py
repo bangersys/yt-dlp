@@ -11,7 +11,7 @@ import urllib.parse
 import uuid
 
 from .common import InfoExtractor
-from ..aes import aes_ecb_decrypt
+from ..utils.crypto import aes_ecb_decrypt
 from ..networking import RequestHandler, Response
 from ..networking.exceptions import TransportError
 from ..utils import (

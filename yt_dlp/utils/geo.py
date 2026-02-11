@@ -2,7 +2,7 @@ import random
 import socket
 import struct
 
-from .exceptions import ExtractorError
+from .types.exceptions import ExtractorError
 from ..constants import COUNTRY_IP_MAP, COUNTRY_MAP
 
 

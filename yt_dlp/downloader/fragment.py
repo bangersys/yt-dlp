@@ -8,7 +8,7 @@ import time
 
 from .common import FileDownloader
 from .http import HttpFD
-from ..aes import aes_cbc_decrypt_bytes, unpad_pkcs7
+from ..utils.crypto import aes_cbc_decrypt_bytes, unpad_pkcs7
 from ..networking import Request
 from ..networking.exceptions import HTTPError, IncompleteRead
 from ..utils import DownloadError, RetryManager, traverse_obj

@@ -4,7 +4,8 @@ import traceback
 
 
 def bug_reports_message(before=';'):
-    from ..update import REPOSITORY
+    from ...constants import Namespace
+    REPOSITORY = Namespace.REPOSITORY
 
     msg = (f'please report this issue on  https://github.com/{REPOSITORY}/issues?q= , '
            'filling out the appropriate issue template. Confirm you are on the latest version using  yt-dlp -U')
@@ -35,7 +36,7 @@ class ExtractorError(YoutubeDLError):
         """ tb, if given, is the original traceback (so that it can be printed out).
         If expected is set, this is a normal error message and most likely not a bug in yt-dlp.
         """
-        from ..networking.exceptions import network_exceptions
+        from ...networking.exceptions import network_exceptions
         if sys.exc_info()[0] in network_exceptions:
             expected = True
 
@@ -52,7 +53,7 @@ class ExtractorError(YoutubeDLError):
 
     @property
     def __msg(self):
-        from .formatting import format_field
+        from ..formatting import format_field, remove_end, str_or_none, float_or_none
 
         return ''.join((
             format_field(self.ie, None, '[%s] '),
@@ -62,7 +63,7 @@ class ExtractorError(YoutubeDLError):
             '' if self.expected else bug_reports_message()))
 
     def format_traceback(self):
-        from .formatting import join_nonempty
+        from ..formatting import join_nonempty
 
         return join_nonempty(
             self.traceback and ''.join(traceback.format_tb(self.traceback)),
@@ -88,8 +89,7 @@ class RegexNotFoundError(ExtractorError):
     pass
 
 
-# GeoRestrictedError moved to yt_dlp.utils.geo
-from .geo import GeoRestrictedError
+
 
 
 class UserNotLive(ExtractorError):
@@ -228,3 +228,7 @@ class XAttrMetadataError(YoutubeDLError):
 
 class XAttrUnavailableError(YoutubeDLError):
     pass
+
+
+# GeoRestrictedError moved to yt_dlp.utils.geo
+from ..geo import GeoRestrictedError

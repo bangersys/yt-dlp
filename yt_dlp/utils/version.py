@@ -9,7 +9,7 @@ import sys
 
 from ..globals import IN_CLI
 from .formatting import format_field, join_nonempty, variadic
-from .exceptions import bug_reports_message, YoutubeDLError
+from .types import bug_reports_message, YoutubeDLError
 
 
 @functools.cache

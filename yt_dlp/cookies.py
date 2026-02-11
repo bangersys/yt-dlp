@@ -20,9 +20,10 @@ import time
 import urllib.request
 from enum import Enum, auto
 
-from .aes import (
+from .utils.crypto import (
     aes_cbc_decrypt_bytes,
-    aes_gcm_decrypt_and_verify_bytes,
+    bytes_to_long,
+    long_to_bytes,
     unpad_pkcs7,
 )
 from .constants import (

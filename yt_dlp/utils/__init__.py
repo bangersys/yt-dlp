@@ -15,16 +15,17 @@ from .xml import *
 from .subtitles import *
 from .progress import *
 from .version import *
+from .crypto import *
 
 from ._utils import *
 from ._json import *
-from ._utils import _configuration_args  # noqa: F401
 from .download import download_range_func
-from . import geo
+from . import crypto, types
+from ._utils import _UnsafeExtensionError
+from .types import *
 from ..constants import IDENTITY, NO_DEFAULT  # noqa: F401
 
 # Prefer traversal as source of truth for traversal/html helper utilities
-from .datatypes import *
 from .traversal import (
     HTMLAttributeParser,
     HTMLBreakOnClosingTagParser,
@@ -44,6 +45,6 @@ from .traversal import (
     get_elements_html_by_attribute,
     get_elements_html_by_class,
     get_elements_text_and_html_by_attribute,
-    parse_list,
     unescapeHTML,
 )
+

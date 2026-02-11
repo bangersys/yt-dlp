@@ -2,7 +2,7 @@ import re
 import urllib.parse
 
 from .common import InfoExtractor
-from ..aes import aes_decrypt_text
+from ..utils.crypto import aes_decrypt_text
 from ..utils import (
     determine_ext,
     format_field,
