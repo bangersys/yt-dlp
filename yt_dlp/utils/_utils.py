@@ -1,4 +1,5 @@
 import base64
+from .datatypes import *
 import binascii
 import calendar
 import codecs
@@ -12,8 +13,6 @@ import enum
 import functools
 import hashlib
 import hmac
-import html.entities
-import html.parser
 import inspect
 import io
 import itertools
@@ -84,6 +83,15 @@ from .exceptions import *
 from .formatting import preferredencoding, supports_terminal_sequences, variadic, write_string
 from .json import NO_DEFAULT
 from .math import lookup_unit_table, parse_filesize
+from .version import (
+    detect_exe_version,
+    get_exe_version,
+    get_windows_version,
+    is_outdated_version,
+    system_identifier,
+    version_tuple,
+    ytdl_is_updateable,
+)
 
 __name__ = __name__.rsplit('.', 1)[0]  # noqa: A001 # Pretend to be the parent module
 
@@ -136,313 +144,33 @@ def deprecation_warning(msg, *, printer=None, stacklevel=0, **kwargs):
 deprecation_warning._cache = set()
 
 
-def find_xpath_attr(node, xpath, key, val=None):
-    """ Find the xpath xpath[@key=val] """
-    assert re.match(r'^[a-zA-Z_-]+$', key)
-    expr = xpath + (f'[@{key}]' if val is None else f"[@{key}='{val}']")
-    return node.find(expr)
 
-# On python2.6 the xml.etree.ElementTree.Element methods don't support
-# the namespace parameter
+from .xml import *
 
 
-def xpath_with_ns(path, ns_map):
-    components = [c.split(':') for c in path.split('/')]
-    replaced = []
-    for c in components:
-        if len(c) == 1:
-            replaced.append(c[0])
-        else:
-            ns, tag = c
-            replaced.append(f'{{{ns_map[ns]}}}{tag}')
-    return '/'.join(replaced)
 
 
-def xpath_element(node, xpath, name=None, fatal=False, default=NO_DEFAULT):
-    def _find_xpath(xpath):
-        return node.find(xpath)
-
-    if isinstance(xpath, str):
-        n = _find_xpath(xpath)
-    else:
-        for xp in xpath:
-            n = _find_xpath(xp)
-            if n is not None:
-                break
-
-    if n is None:
-        if default is not NO_DEFAULT:
-            return default
-        elif fatal:
-            name = xpath if name is None else name
-            raise ExtractorError(f'Could not find XML element {name}')
-        else:
-            return None
-    return n
 
 
-def xpath_text(node, xpath, name=None, fatal=False, default=NO_DEFAULT):
-    n = xpath_element(node, xpath, name, fatal=fatal, default=default)
-    if n is None or n == default:
-        return n
-    if n.text is None:
-        if default is not NO_DEFAULT:
-            return default
-        elif fatal:
-            name = xpath if name is None else name
-            raise ExtractorError(f'Could not find XML element\'s text {name}')
-        else:
-            return None
-    return n.text
-
-
-def xpath_attr(node, xpath, key, name=None, fatal=False, default=NO_DEFAULT):
-    n = find_xpath_attr(node, xpath, key)
-    if n is None:
-        if default is not NO_DEFAULT:
-            return default
-        elif fatal:
-            name = f'{xpath}[@{key}]' if name is None else name
-            raise ExtractorError(f'Could not find XML attribute {name}')
-        else:
-            return None
-    return n.attrib[key]
-
-
-def get_element_by_id(id, html, **kwargs):
-    """Return the content of the tag with the specified ID in the passed HTML document"""
-    return get_element_by_attribute('id', id, html, **kwargs)
-
-
-def get_element_html_by_id(id, html, **kwargs):
-    """Return the html of the tag with the specified ID in the passed HTML document"""
-    return get_element_html_by_attribute('id', id, html, **kwargs)
-
-
-def get_element_by_class(class_name, html):
-    """Return the content of the first tag with the specified class in the passed HTML document"""
-    retval = get_elements_by_class(class_name, html)
-    return retval[0] if retval else None
-
-
-def get_element_html_by_class(class_name, html):
-    """Return the html of the first tag with the specified class in the passed HTML document"""
-    retval = get_elements_html_by_class(class_name, html)
-    return retval[0] if retval else None
-
-
-def get_element_by_attribute(attribute, value, html, **kwargs):
-    retval = get_elements_by_attribute(attribute, value, html, **kwargs)
-    return retval[0] if retval else None
-
-
-def get_element_html_by_attribute(attribute, value, html, **kargs):
-    retval = get_elements_html_by_attribute(attribute, value, html, **kargs)
-    return retval[0] if retval else None
-
-
-def get_elements_by_class(class_name, html, **kargs):
-    """Return the content of all tags with the specified class in the passed HTML document as a list"""
-    return get_elements_by_attribute(
-        'class', rf'[^\'"]*(?<=[\'"\s]){re.escape(class_name)}(?=[\'"\s])[^\'"]*',
-        html, escape_value=False)
-
-
-def get_elements_html_by_class(class_name, html):
-    """Return the html of all tags with the specified class in the passed HTML document as a list"""
-    return get_elements_html_by_attribute(
-        'class', rf'[^\'"]*(?<=[\'"\s]){re.escape(class_name)}(?=[\'"\s])[^\'"]*',
-        html, escape_value=False)
-
-
-def get_elements_by_attribute(*args, **kwargs):
-    """Return the content of the tag with the specified attribute in the passed HTML document"""
-    return [content for content, _ in get_elements_text_and_html_by_attribute(*args, **kwargs)]
-
-
-def get_elements_html_by_attribute(*args, **kwargs):
-    """Return the html of the tag with the specified attribute in the passed HTML document"""
-    return [whole for _, whole in get_elements_text_and_html_by_attribute(*args, **kwargs)]
-
-
-def get_elements_text_and_html_by_attribute(attribute, value, html, *, tag=r'[\w:.-]+', escape_value=True):
-    """
-    Return the text (content) and the html (whole) of the tag with the specified
-    attribute in the passed HTML document
-    """
-    if not value:
-        return
-
-    quote = '' if re.match(r'''[\s"'`=<>]''', value) else '?'
-
-    value = re.escape(value) if escape_value else value
-
-    partial_element_re = rf'''(?x)
-        <(?P<tag>{tag})
-         (?:\s(?:[^>"']|"[^"]*"|'[^']*')*)?
-         \s{re.escape(attribute)}\s*=\s*(?P<_q>['"]{quote})(?-x:{value})(?P=_q)
-        '''
-
-    for m in re.finditer(partial_element_re, html):
-        content, whole = get_element_text_and_html_by_tag(m.group('tag'), html[m.start():])
-
-        yield (
-            unescapeHTML(re.sub(r'^(?P<q>["\'])(?P<content>.*)(?P=q)$', r'\g<content>', content, flags=re.DOTALL)),
-            whole,
-        )
-
-
-class HTMLBreakOnClosingTagParser(html.parser.HTMLParser):
-    """
-    HTML parser which raises HTMLBreakOnClosingTagException upon reaching the
-    closing tag for the first opening tag it has encountered, and can be used
-    as a context manager
-    """
-
-    class HTMLBreakOnClosingTagException(Exception):
-        pass
-
-    def __init__(self):
-        self.tagstack = collections.deque()
-        html.parser.HTMLParser.__init__(self)
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *_):
-        self.close()
-
-    def close(self):
-        # handle_endtag does not return upon raising HTMLBreakOnClosingTagException,
-        # so data remains buffered; we no longer have any interest in it, thus
-        # override this method to discard it
-        pass
-
-    def handle_starttag(self, tag, _):
-        self.tagstack.append(tag)
-
-    def handle_endtag(self, tag):
-        if not self.tagstack:
-            raise compat_HTMLParseError('no tags in the stack')
-        while self.tagstack:
-            inner_tag = self.tagstack.pop()
-            if inner_tag == tag:
-                break
-        else:
-            raise compat_HTMLParseError(f'matching opening tag for closing {tag} tag not found')
-        if not self.tagstack:
-            raise self.HTMLBreakOnClosingTagException
 
 
 # XXX: This should be far less strict
-def get_element_text_and_html_by_tag(tag, html):
-    """
-    For the first element with the specified tag in the passed HTML document
-    return its' content (text) and the whole element (html)
-    """
-    def find_or_raise(haystack, needle, exc):
-        try:
-            return haystack.index(needle)
-        except ValueError:
-            raise exc
-    closing_tag = f'</{tag}>'
-    whole_start = find_or_raise(
-        html, f'<{tag}', compat_HTMLParseError(f'opening {tag} tag not found'))
-    content_start = find_or_raise(
-        html[whole_start:], '>', compat_HTMLParseError(f'malformed opening {tag} tag'))
-    content_start += whole_start + 1
-    with HTMLBreakOnClosingTagParser() as parser:
-        parser.feed(html[whole_start:content_start])
-        if not parser.tagstack or parser.tagstack[0] != tag:
-            raise compat_HTMLParseError(f'parser did not match opening {tag} tag')
-        offset = content_start
-        while offset < len(html):
-            next_closing_tag_start = find_or_raise(
-                html[offset:], closing_tag,
-                compat_HTMLParseError(f'closing {tag} tag not found'))
-            next_closing_tag_end = next_closing_tag_start + len(closing_tag)
-            try:
-                parser.feed(html[offset:offset + next_closing_tag_end])
-                offset += next_closing_tag_end
-            except HTMLBreakOnClosingTagParser.HTMLBreakOnClosingTagException:
-                return html[content_start:offset + next_closing_tag_start], \
-                    html[whole_start:offset + next_closing_tag_end]
-        raise compat_HTMLParseError('unexpected end of html')
 
 
-class HTMLAttributeParser(html.parser.HTMLParser):
-    """Trivial HTML parser to gather the attributes for a single element"""
-
-    def __init__(self):
-        self.attrs = {}
-        html.parser.HTMLParser.__init__(self)
-
-    def handle_starttag(self, tag, attrs):
-        self.attrs = dict(attrs)
-        raise compat_HTMLParseError('done')
 
 
-class HTMLListAttrsParser(html.parser.HTMLParser):
-    """HTML parser to gather the attributes for the elements of a list"""
-
-    def __init__(self):
-        html.parser.HTMLParser.__init__(self)
-        self.items = []
-        self._level = 0
-
-    def handle_starttag(self, tag, attrs):
-        if tag == 'li' and self._level == 0:
-            self.items.append(dict(attrs))
-        self._level += 1
-
-    def handle_endtag(self, tag):
-        self._level -= 1
 
 
-def extract_attributes(html_element):
-    """Given a string for an HTML element such as
-    <el
-         a="foo" B="bar" c="&98;az" d=boz
-         empty= noval entity="&amp;"
-         sq='"' dq="'"
-    >
-    Decode and return a dictionary of attributes.
-    {
-        'a': 'foo', 'b': 'bar', c: 'baz', d: 'boz',
-        'empty': '', 'noval': None, 'entity': '&',
-        'sq': '"', 'dq': '\''
-    }.
-    """
-    parser = HTMLAttributeParser()
-    with contextlib.suppress(compat_HTMLParseError):
-        parser.feed(html_element)
-        parser.close()
-    return parser.attrs
 
 
-def parse_list(webpage):
-    """Given a string for an series of HTML <li> elements,
-    return a dictionary of their attributes"""
-    parser = HTMLListAttrsParser()
-    parser.feed(webpage)
-    parser.close()
-    return parser.items
 
 
-def clean_html(html):
-    """Clean an HTML snippet into a readable string"""
 
-    if html is None:  # Convenience for sanitizing descriptions etc.
-        return html
 
-    html = re.sub(r'\s+', ' ', html)
-    html = re.sub(r'(?u)\s?<\s?br\s?/?\s?>\s?', '\n', html)
-    html = re.sub(r'(?u)<\s?/\s?p\s?>\s?<\s?p[^>]*>', '\n', html)
-    # Strip html tags
-    html = re.sub('<.*?>', '', html)
-    # Replace html entities
-    html = unescapeHTML(html)
-    return html.strip()
+
+
+
+
 
 
 class LenientJSONDecoder(json.JSONDecoder):
@@ -489,7 +217,6 @@ from .filesystem import (
     Popen,
     _get_exe_version_output,
     check_executable,
-    detect_exe_version,
     encodeArgument,
     expand_path,
     get_executable_path,
@@ -551,53 +278,13 @@ def orderedSet(iterable, *, lazy=False):
     return _iter() if lazy else list(_iter())
 
 
-def _htmlentity_transform(entity_with_semicolon):
-    """Transforms an HTML entity to a character."""
-    entity = entity_with_semicolon[:-1]
-
-    # Known non-numeric HTML entity
-    if entity in html.entities.name2codepoint:
-        return chr(html.entities.name2codepoint[entity])
-
-    # TODO: HTML5 allows entities without a semicolon.
-    # E.g. '&Eacuteric' should be decoded as 'Éric'.
-    if entity_with_semicolon in html.entities.html5:
-        return html.entities.html5[entity_with_semicolon]
-
-    mobj = re.match(r'#(x[0-9a-fA-F]+|[0-9]+)', entity)
-    if mobj is not None:
-        numstr = mobj.group(1)
-        if numstr.startswith('x'):
-            base = 16
-            numstr = f'0{numstr}'
-        else:
-            base = 10
-        # See https://github.com/ytdl-org/youtube-dl/issues/7518
-        with contextlib.suppress(ValueError):
-            return chr(int(numstr, base))
-
-    # Unknown entity in name, return its literal representation
-    return f'&{entity};'
 
 
-def unescapeHTML(s):
-    if s is None:
-        return None
-    assert isinstance(s, str)
-
-    return re.sub(
-        r'&([^&;]+;)', lambda m: _htmlentity_transform(m.group(1)), s)
 
 
-def escapeHTML(text):
-    return (
-        text
-        .replace('&', '&amp;')
-        .replace('<', '&lt;')
-        .replace('>', '&gt;')
-        .replace('"', '&quot;')
-        .replace("'", '&#39;')
-    )
+
+
+
 
 
 class netrc_from_content(netrc.netrc):
@@ -768,8 +455,8 @@ def determine_ext(url, default_ext='unknown_video'):
         return default_ext
 
 
-def subtitles_filename(filename, sub_lang, sub_format, expected_real_ext=None):
-    return replace_extension(filename, sub_lang + '.' + sub_format, expected_real_ext)
+
+from .subtitles import *
 
 
 def datetime_from_str(date_str, precision='auto', format='%Y%m%d'):
@@ -903,23 +590,6 @@ class DateRange:
 
 
 @functools.cache
-def system_identifier():
-    python_implementation = platform.python_implementation()
-    if python_implementation == 'PyPy' and hasattr(sys, 'pypy_version_info'):
-        python_implementation += ' version %d.%d.%d' % sys.pypy_version_info[:3]
-    libc_ver = []
-    with contextlib.suppress(OSError):  # We may not have access to the executable
-        libc_ver = platform.libc_ver()
-
-    return 'Python {} ({} {} {}) - {} ({}{})'.format(
-        platform.python_version(),
-        python_implementation,
-        platform.machine(),
-        platform.architecture()[0],
-        platform.platform(),
-        ssl.OPENSSL_VERSION,
-        format_field(join_nonempty(*libc_ver, delim=' '), None, ', %s'),
-    )
 
 
 
@@ -1230,12 +900,6 @@ def month_by_abbreviation(abbrev):
         return None
 
 
-def fix_xml_ampersands(xml_str):
-    """Replace all the '&' by '&amp;' in XML"""
-    return re.sub(
-        r'&(?!amp;|lt;|gt;|apos;|quot;|#x[0-9a-fA-F]{,4};|#[0-9]{,4};)',
-        '&amp;',
-        xml_str)
 
 
 def setproctitle(title):
@@ -1395,41 +1059,6 @@ def check_executable(exe, args=[]):
     return exe
 
 
-def _get_exe_version_output(exe, args, ignore_return_code=False):
-    try:
-        # STDIN should be redirected too. On UNIX-like systems, ffmpeg triggers
-        # SIGTTOU if yt-dlp is run in the background.
-        # See https://github.com/ytdl-org/youtube-dl/issues/955#issuecomment-209789656
-        stdout, _, ret = Popen.run([encodeArgument(exe), *args], text=True,
-                                   stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-        if not ignore_return_code and ret:
-            return None
-    except OSError:
-        return False
-    return stdout
-
-
-def detect_exe_version(output, version_re=None, unrecognized='present'):
-    assert isinstance(output, str)
-    if version_re is None:
-        version_re = r'version\s+([-0-9._a-zA-Z]+)'
-    m = re.search(version_re, output)
-    if m:
-        return m.group(1)
-    else:
-        return unrecognized
-
-
-def get_exe_version(exe, args=['--version'],
-                    version_re=None, unrecognized=('present', 'broken')):
-    """ Returns the version of the specified executable,
-    or False if the executable is not present """
-    unrecognized = variadic(unrecognized)
-    assert len(unrecognized) in (1, 2)
-    out = _get_exe_version_output(exe, args)
-    if out is None:
-        return unrecognized[-1]
-    return out and detect_exe_version(out, version_re, unrecognized[0])
 
 
 def frange(start=0, stop=None, step=1):
@@ -1442,205 +1071,6 @@ def frange(start=0, stop=None, step=1):
         start += step
 
 
-class LazyList(collections.abc.Sequence):
-    """Lazy immutable list from an iterable
-    Note that slices of a LazyList are lists and not LazyList"""
-
-    class IndexError(IndexError):  # noqa: A001
-        pass
-
-    def __init__(self, iterable, *, reverse=False, _cache=None):
-        self._iterable = iter(iterable)
-        self._cache = [] if _cache is None else _cache
-        self._reversed = reverse
-
-    def __iter__(self):
-        if self._reversed:
-            # We need to consume the entire iterable to iterate in reverse
-            yield from self.exhaust()
-            return
-        yield from self._cache
-        for item in self._iterable:
-            self._cache.append(item)
-            yield item
-
-    def _exhaust(self):
-        self._cache.extend(self._iterable)
-        self._iterable = []  # Discard the emptied iterable to make it pickle-able
-        return self._cache
-
-    def exhaust(self):
-        """Evaluate the entire iterable"""
-        return self._exhaust()[::-1 if self._reversed else 1]
-
-    @staticmethod
-    def _reverse_index(x):
-        return None if x is None else ~x
-
-    def __getitem__(self, idx):
-        if isinstance(idx, slice):
-            if self._reversed:
-                idx = slice(self._reverse_index(idx.start), self._reverse_index(idx.stop), -(idx.step or 1))
-            start, stop, step = idx.start, idx.stop, idx.step or 1
-        elif isinstance(idx, int):
-            if self._reversed:
-                idx = self._reverse_index(idx)
-            start, stop, step = idx, idx, 0
-        else:
-            raise TypeError('indices must be integers or slices')
-        if ((start or 0) < 0 or (stop or 0) < 0
-                or (start is None and step < 0)
-                or (stop is None and step > 0)):
-            # We need to consume the entire iterable to be able to slice from the end
-            # Obviously, never use this with infinite iterables
-            self._exhaust()
-            try:
-                return self._cache[idx]
-            except IndexError as e:
-                raise self.IndexError(e) from e
-        n = max(start or 0, stop or 0) - len(self._cache) + 1
-        if n > 0:
-            self._cache.extend(itertools.islice(self._iterable, n))
-        try:
-            return self._cache[idx]
-        except IndexError as e:
-            raise self.IndexError(e) from e
-
-    def __bool__(self):
-        try:
-            self[-1] if self._reversed else self[0]
-        except self.IndexError:
-            return False
-        return True
-
-    def __len__(self):
-        self._exhaust()
-        return len(self._cache)
-
-    def __reversed__(self):
-        return type(self)(self._iterable, reverse=not self._reversed, _cache=self._cache)
-
-    def __copy__(self):
-        return type(self)(self._iterable, reverse=self._reversed, _cache=self._cache)
-
-    def __repr__(self):
-        # repr and str should mimic a list. So we exhaust the iterable
-        return repr(self.exhaust())
-
-    def __str__(self):
-        return repr(self.exhaust())
-
-
-class PagedList:
-
-    class IndexError(IndexError):  # noqa: A001
-        pass
-
-    def __len__(self):
-        # This is only useful for tests
-        return len(self.getslice())
-
-    def __init__(self, pagefunc, pagesize, use_cache=True):
-        self._pagefunc = pagefunc
-        self._pagesize = pagesize
-        self._pagecount = float('inf')
-        self._use_cache = use_cache
-        self._cache = {}
-
-    def getpage(self, pagenum):
-        page_results = self._cache.get(pagenum)
-        if page_results is None:
-            page_results = [] if pagenum > self._pagecount else list(self._pagefunc(pagenum))
-        if self._use_cache:
-            self._cache[pagenum] = page_results
-        return page_results
-
-    def getslice(self, start=0, end=None):
-        return list(self._getslice(start, end))
-
-    def _getslice(self, start, end):
-        raise NotImplementedError('This method must be implemented by subclasses')
-
-    def __getitem__(self, idx):
-        assert self._use_cache, 'Indexing PagedList requires cache'
-        if not isinstance(idx, int) or idx < 0:
-            raise TypeError('indices must be non-negative integers')
-        entries = self.getslice(idx, idx + 1)
-        if not entries:
-            raise self.IndexError
-        return entries[0]
-
-    def __bool__(self):
-        return bool(self.getslice(0, 1))
-
-
-class OnDemandPagedList(PagedList):
-    """Download pages until a page with less than maximum results"""
-
-    def _getslice(self, start, end):
-        for pagenum in itertools.count(start // self._pagesize):
-            firstid = pagenum * self._pagesize
-            nextfirstid = pagenum * self._pagesize + self._pagesize
-            if start >= nextfirstid:
-                continue
-
-            startv = (
-                start % self._pagesize
-                if firstid <= start < nextfirstid
-                else 0)
-            endv = (
-                ((end - 1) % self._pagesize) + 1
-                if (end is not None and firstid <= end <= nextfirstid)
-                else None)
-
-            try:
-                page_results = self.getpage(pagenum)
-            except Exception:
-                self._pagecount = pagenum - 1
-                raise
-            if startv != 0 or endv is not None:
-                page_results = page_results[startv:endv]
-            yield from page_results
-
-            # A little optimization - if current page is not "full", ie. does
-            # not contain page_size videos then we can assume that this page
-            # is the last one - there are no more ids on further pages -
-            # i.e. no need to query again.
-            if len(page_results) + startv < self._pagesize:
-                break
-
-            # If we got the whole page, but the next page is not interesting,
-            # break out early as well
-            if end == nextfirstid:
-                break
-
-
-class InAdvancePagedList(PagedList):
-    """PagedList with total number of pages known in advance"""
-
-    def __init__(self, pagefunc, pagecount, pagesize):
-        PagedList.__init__(self, pagefunc, pagesize, True)
-        self._pagecount = pagecount
-
-    def _getslice(self, start, end):
-        start_page = start // self._pagesize
-        end_page = self._pagecount if end is None else min(self._pagecount, end // self._pagesize + 1)
-        skip_elems = start - start_page * self._pagesize
-        only_more = None if end is None else end - start
-        for pagenum in range(start_page, end_page):
-            page_results = self.getpage(pagenum)
-            if skip_elems:
-                page_results = page_results[skip_elems:]
-                skip_elems = None
-            if only_more is not None:
-                if len(page_results) < only_more:
-                    only_more -= len(page_results)
-                else:
-                    yield from page_results[:only_more]
-                    break
-            yield from page_results
-
-
 class PlaylistEntries:
     MissingEntry = object()
     is_exhausted = False
@@ -1650,6 +1080,7 @@ class PlaylistEntries:
 
         # _entries must be assigned now since infodict can change during iteration
         entries = info_dict.get('entries')
+        from .datatypes import LazyList
         if entries is None:
             raise EntryNotInPlaylist('There are no entries')
         elif isinstance(entries, list):
@@ -1735,6 +1166,7 @@ class PlaylistEntries:
         else:
             def get_entry(i):
                 try:
+                    from .datatypes import LazyList
                     return type(self.ydl)._handle_extraction_exceptions(lambda _, i: self._entries[i])(self.ydl, i)
                 except (LazyList.IndexError, PagedList.IndexError):
                     raise self.IndexError
@@ -2068,21 +1500,6 @@ def limit_length(s, length):
 
 
 
-def is_outdated_version(version, limit, assume_new=True):
-    if not version:
-        return not assume_new
-    try:
-        return version_tuple(version) < version_tuple(limit)
-    except ValueError:
-        return not assume_new
-
-
-def ytdl_is_updateable():
-    """ Returns if yt-dlp can be updated with -U """
-
-    from ..update import is_non_updateable
-
-    return not is_non_updateable()
 
 
 @partial_application
@@ -2492,236 +1909,7 @@ def match_filter_func(filters, breaking_filters=None):
     return _match_func
 
 
-class download_range_func:
-    def __init__(self, chapters, ranges, from_info=False):
-        self.chapters, self.ranges, self.from_info = chapters, ranges, from_info
 
-    def __call__(self, info_dict, ydl):
-
-        warning = ('There are no chapters matching the regex' if info_dict.get('chapters')
-                   else 'Cannot match chapters since chapter information is unavailable')
-        for regex in self.chapters or []:
-            for i, chapter in enumerate(info_dict.get('chapters') or []):
-                if re.search(regex, chapter['title']):
-                    warning = None
-                    yield {**chapter, 'index': i}
-        if self.chapters and warning:
-            ydl.to_screen(f'[info] {info_dict["id"]}: {warning}')
-
-        for start, end in self.ranges or []:
-            yield {
-                'start_time': self._handle_negative_timestamp(start, info_dict),
-                'end_time': self._handle_negative_timestamp(end, info_dict),
-            }
-
-        if self.from_info and (info_dict.get('start_time') or info_dict.get('end_time')):
-            yield {
-                'start_time': info_dict.get('start_time') or 0,
-                'end_time': info_dict.get('end_time') or float('inf'),
-            }
-        elif not self.ranges and not self.chapters:
-            yield {}
-
-    @staticmethod
-    def _handle_negative_timestamp(time, info):
-        return max(info['duration'] + time, 0) if info.get('duration') and time < 0 else time
-
-    def __eq__(self, other):
-        return (isinstance(other, download_range_func)
-                and self.chapters == other.chapters and self.ranges == other.ranges)
-
-    def __repr__(self):
-        return f'{__name__}.{type(self).__name__}({self.chapters}, {self.ranges})'
-
-
-def parse_dfxp_time_expr(time_expr):
-    if not time_expr:
-        return
-
-    mobj = re.match(rf'^(?P<time_offset>{NUMBER_RE})s?$', time_expr)
-    if mobj:
-        return float(mobj.group('time_offset'))
-
-    mobj = re.match(r'^(\d+):(\d\d):(\d\d(?:(?:\.|:)\d+)?)$', time_expr)
-    if mobj:
-        return 3600 * int(mobj.group(1)) + 60 * int(mobj.group(2)) + float(mobj.group(3).replace(':', '.'))
-
-
-def srt_subtitles_timecode(seconds):
-    return '%02d:%02d:%02d,%03d' % timetuple_from_msec(seconds * 1000)
-
-
-def ass_subtitles_timecode(seconds):
-    time = timetuple_from_msec(seconds * 1000)
-    return '%01d:%02d:%02d.%02d' % (*time[:-1], time.milliseconds / 10)
-
-
-def dfxp2srt(dfxp_data):
-    """
-    @param dfxp_data A bytes-like object containing DFXP data
-    @returns A unicode object containing converted SRT data
-    """
-    LEGACY_NAMESPACES = (
-        (b'http://www.w3.org/ns/ttml', [
-            b'http://www.w3.org/2004/11/ttaf1',
-            b'http://www.w3.org/2006/04/ttaf1',
-            b'http://www.w3.org/2006/10/ttaf1',
-        ]),
-        (b'http://www.w3.org/ns/ttml#styling', [
-            b'http://www.w3.org/ns/ttml#style',
-        ]),
-    )
-
-    SUPPORTED_STYLING = [
-        'color',
-        'fontFamily',
-        'fontSize',
-        'fontStyle',
-        'fontWeight',
-        'textDecoration',
-    ]
-
-    _x = functools.partial(xpath_with_ns, ns_map={
-        'xml': 'http://www.w3.org/XML/1998/namespace',
-        'ttml': 'http://www.w3.org/ns/ttml',
-        'tts': 'http://www.w3.org/ns/ttml#styling',
-    })
-
-    styles = {}
-    default_style = {}
-
-    class TTMLPElementParser:
-        _out = ''
-        _unclosed_elements = []
-        _applied_styles = []
-
-        def start(self, tag, attrib):
-            if tag in (_x('ttml:br'), 'br'):
-                self._out += '\n'
-            else:
-                unclosed_elements = []
-                style = {}
-                element_style_id = attrib.get('style')
-                if default_style:
-                    style.update(default_style)
-                if element_style_id:
-                    style.update(styles.get(element_style_id, {}))
-                for prop in SUPPORTED_STYLING:
-                    prop_val = attrib.get(_x('tts:' + prop))
-                    if prop_val:
-                        style[prop] = prop_val
-                if style:
-                    font = ''
-                    for k, v in sorted(style.items()):
-                        if self._applied_styles and self._applied_styles[-1].get(k) == v:
-                            continue
-                        if k == 'color':
-                            font += f' color="{v}"'
-                        elif k == 'fontSize':
-                            font += f' size="{v}"'
-                        elif k == 'fontFamily':
-                            font += f' face="{v}"'
-                        elif k == 'fontWeight' and v == 'bold':
-                            self._out += '<b>'
-                            unclosed_elements.append('b')
-                        elif k == 'fontStyle' and v == 'italic':
-                            self._out += '<i>'
-                            unclosed_elements.append('i')
-                        elif k == 'textDecoration' and v == 'underline':
-                            self._out += '<u>'
-                            unclosed_elements.append('u')
-                    if font:
-                        self._out += '<font' + font + '>'
-                        unclosed_elements.append('font')
-                    applied_style = {}
-                    if self._applied_styles:
-                        applied_style.update(self._applied_styles[-1])
-                    applied_style.update(style)
-                    self._applied_styles.append(applied_style)
-                self._unclosed_elements.append(unclosed_elements)
-
-        def end(self, tag):
-            if tag not in (_x('ttml:br'), 'br'):
-                unclosed_elements = self._unclosed_elements.pop()
-                for element in reversed(unclosed_elements):
-                    self._out += f'</{element}>'
-                if unclosed_elements and self._applied_styles:
-                    self._applied_styles.pop()
-
-        def data(self, data):
-            self._out += data
-
-        def close(self):
-            return self._out.strip()
-
-    # Fix UTF-8 encoded file wrongly marked as UTF-16. See https://github.com/yt-dlp/yt-dlp/issues/6543#issuecomment-1477169870
-    # This will not trigger false positives since only UTF-8 text is being replaced
-    dfxp_data = dfxp_data.replace(b'encoding=\'UTF-16\'', b'encoding=\'UTF-8\'')
-
-    def parse_node(node):
-        target = TTMLPElementParser()
-        parser = xml.etree.ElementTree.XMLParser(target=target)
-        parser.feed(xml.etree.ElementTree.tostring(node))
-        return parser.close()
-
-    for k, v in LEGACY_NAMESPACES:
-        for ns in v:
-            dfxp_data = dfxp_data.replace(ns, k)
-
-    dfxp = compat_etree_fromstring(dfxp_data)
-    out = []
-    paras = dfxp.findall(_x('.//ttml:p')) or dfxp.findall('.//p')
-
-    if not paras:
-        raise ValueError('Invalid dfxp/TTML subtitle')
-
-    repeat = False
-    while True:
-        for style in dfxp.findall(_x('.//ttml:style')):
-            style_id = style.get('id') or style.get(_x('xml:id'))
-            if not style_id:
-                continue
-            parent_style_id = style.get('style')
-            if parent_style_id:
-                if parent_style_id not in styles:
-                    repeat = True
-                    continue
-                styles[style_id] = styles[parent_style_id].copy()
-            for prop in SUPPORTED_STYLING:
-                prop_val = style.get(_x('tts:' + prop))
-                if prop_val:
-                    styles.setdefault(style_id, {})[prop] = prop_val
-        if repeat:
-            repeat = False
-        else:
-            break
-
-    for p in ('body', 'div'):
-        ele = xpath_element(dfxp, [_x('.//ttml:' + p), './/' + p])
-        if ele is None:
-            continue
-        style = styles.get(ele.get('style'))
-        if not style:
-            continue
-        default_style.update(style)
-
-    for para, index in zip(paras, itertools.count(1), strict=False):
-        begin_time = parse_dfxp_time_expr(para.attrib.get('begin'))
-        end_time = parse_dfxp_time_expr(para.attrib.get('end'))
-        dur = parse_dfxp_time_expr(para.attrib.get('dur'))
-        if begin_time is None:
-            continue
-        if not end_time:
-            if not dur:
-                continue
-            end_time = begin_time + dur
-        out.append('%d\n%s --> %s\n%s\n\n' % (
-            index,
-            srt_subtitles_timecode(begin_time),
-            srt_subtitles_timecode(end_time),
-            parse_node(para)))
-
-    return ''.join(out)
 
 
 def cli_option(params, command_option, param, separator=None):
@@ -3542,59 +2730,7 @@ def merge_headers(*dicts):
     return {k.title(): v for k, v in itertools.chain.from_iterable(map(dict.items, dicts))}
 
 
-def cached_method(f):
-    """Cache a method"""
-    signature = inspect.signature(f)
 
-    @functools.wraps(f)
-    def wrapper(self, *args, **kwargs):
-        bound_args = signature.bind(self, *args, **kwargs)
-        bound_args.apply_defaults()
-        key = tuple(bound_args.arguments.values())[1:]
-
-        cache = vars(self).setdefault('_cached_method__cache', {}).setdefault(f.__name__, {})
-        if key not in cache:
-            cache[key] = f(self, *args, **kwargs)
-        return cache[key]
-    return wrapper
-
-
-class classproperty:
-    """property access for class methods with optional caching"""
-    def __new__(cls, func=None, *args, **kwargs):
-        if not func:
-            return functools.partial(cls, *args, **kwargs)
-        return super().__new__(cls)
-
-    def __init__(self, func, *, cache=False):
-        functools.update_wrapper(self, func)
-        self.func = func
-        self._cache = {} if cache else None
-
-    def __get__(self, _, cls):
-        if self._cache is None:
-            return self.func(cls)
-        elif cls not in self._cache:
-            self._cache[cls] = self.func(cls)
-        return self._cache[cls]
-
-
-class function_with_repr:
-    def __init__(self, func, repr_=None):
-        functools.update_wrapper(self, func)
-        self.func, self.__repr = func, repr_
-
-    def __call__(self, *args, **kwargs):
-        return self.func(*args, **kwargs)
-
-    @classmethod
-    def set_repr(cls, repr_):
-        return functools.partial(cls, repr_=repr_)
-
-    def __repr__(self):
-        if self.__repr:
-            return self.__repr
-        return f'{self.func.__module__}.{self.func.__qualname__}'
 
 # removed Namespace and MEDIA_EXTENSIONS (moved to constants.py)
 
@@ -3728,64 +2864,9 @@ class _UnsafeExtensionError(Exception):
                 extension = last = 'unknown_video'
             if last.lower() not in cls.ALLOWED_EXTENSIONS:
                 raise cls(extension)
-
         return extension
 
 
-class RetryManager:
-    """Usage:
-        for retry in RetryManager(...):
-            try:
-                ...
-            except SomeException as err:
-                retry.error = err
-                continue
-    """
-    attempt, _error = 0, None
-
-    def __init__(self, _retries, _error_callback, **kwargs):
-        self.retries = _retries or 0
-        self.error_callback = functools.partial(_error_callback, **kwargs)
-
-    def _should_retry(self):
-        return self._error is not NO_DEFAULT and self.attempt <= self.retries
-
-    @property
-    def error(self):
-        if self._error is NO_DEFAULT:
-            return None
-        return self._error
-
-    @error.setter
-    def error(self, value):
-        self._error = value
-
-    def __iter__(self):
-        while self._should_retry():
-            self.error = NO_DEFAULT
-            self.attempt += 1
-            yield self
-            if self.error:
-                self.error_callback(self.error, self.attempt, self.retries)
-
-    @staticmethod
-    def report_retry(e, count, retries, *, sleep_func, info, warn, error=None, suffix=None):
-        """Utility function for reporting retries"""
-        if count > retries:
-            if error:
-                return error(f'{e}. Giving up after {count - 1} retries') if count > 1 else error(str(e))
-            raise e
-
-        if not count:
-            return warn(e)
-        elif isinstance(e, ExtractorError):
-            e = remove_end(str_or_none(e.cause) or e.orig_msg, '.')
-        warn(f'{e}. Retrying{format_field(suffix, None, " %s")} ({count}/{retries})...')
-
-        delay = float_or_none(sleep_func(n=count - 1)) if callable(sleep_func) else sleep_func
-        if delay:
-            info(f'Sleeping {delay:.2f} seconds ...')
-            time.sleep(delay)
 
 
 @partial_application
@@ -4186,30 +3267,5 @@ class _YDLLogger:
             self._ydl.to_stderr(message)
 
 
-class _ProgressState(enum.Enum):
-    """
-    Represents a state for a progress bar.
 
-    See: https://conemu.github.io/en/AnsiEscapeCodes.html#ConEmu_specific_OSC
-    """
-
-    HIDDEN = 0
-    INDETERMINATE = 3
-    VISIBLE = 1
-    WARNING = 4
-    ERROR = 2
-
-    @classmethod
-    def from_dict(cls, s, /):
-        if s['status'] == 'finished':
-            return cls.INDETERMINATE
-
-        # Not currently used
-        if s['status'] == 'error':
-            return cls.ERROR
-
-        return cls.INDETERMINATE if s.get('_percent') is None else cls.VISIBLE
-
-    def get_ansi_escape(self, /, percent=None):
-        percent = 0 if percent is None else int(percent)
-        return f'\033]9;4;{self.value};{percent}\007'
+from .progress import *

@@ -12,13 +12,15 @@ import sys
 import time
 import unicodedata
 
+from .version import _get_exe_version_output, detect_exe_version
+
 from ..compat import compat_expanduser
 from ..globals import WINDOWS_VT_MODE
 from .constants import NUMBER_RE, MEDIA_EXTENSIONS
 from .formatting import ACCENT_CHARS, write_string
 from .json import NO_DEFAULT
 from .math import lookup_unit_table
-from .types import variadic
+from .datatypes import variadic
 
 
 def sanitize_open(filename, open_mode):

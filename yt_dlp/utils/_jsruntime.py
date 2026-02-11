@@ -7,8 +7,7 @@ import os.path
 import sys
 import sysconfig
 
-from ._utils import _get_exe_version_output, detect_exe_version
-from .math import version_tuple
+from .version import version_tuple, _get_exe_version_output, detect_exe_version
 
 
 _FALLBACK_PATHEXT = ('.COM', '.EXE', '.BAT', '.CMD')

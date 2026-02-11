@@ -11,10 +11,9 @@ from ..utils import (
     Popen,
     check_executable,
     format_field,
-    get_exe_version,
-    is_outdated_version,
     shell_quote,
 )
+from ..utils.version import get_exe_version, is_outdated_version
 
 
 def cookie_to_dict(cookie):

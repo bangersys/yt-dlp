@@ -8,8 +8,8 @@ from ..utils import (
     Popen,
     check_executable,
     encodeArgument,
-    get_exe_version,
 )
+from ..utils.version import get_exe_version
 
 
 def rtmpdump_version():

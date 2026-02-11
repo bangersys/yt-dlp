@@ -12,18 +12,15 @@ from .common import PostProcessor
 from ..compat import imghdr
 from ..constants import ACODECS, EXT_TO_OUT_FORMATS, MEDIA_EXTENSIONS
 from ..utils import (
-ISO639Utils,
+    ISO639Utils,
     Popen,
     PostProcessingError,
-    _get_exe_version_output,
     deprecation_warning,
-    detect_exe_version,
     determine_ext,
     dfxp2srt,
     encodeArgument,
     filter_dict,
     float_or_none,
-    is_outdated_version,
     orderedSet,
     prepend_extension,
     replace_extension,
@@ -31,6 +28,11 @@ ISO639Utils,
     traverse_obj,
     variadic,
     write_json_file,
+)
+from ..utils.version import (
+    _get_exe_version_output,
+    detect_exe_version,
+    is_outdated_version,
 )
 
 

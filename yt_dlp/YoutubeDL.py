@@ -158,7 +158,6 @@ from .utils import (
     strftime_or_none,
     subtitles_filename,
     supports_terminal_sequences,
-    system_identifier,
     filesize_from_tbr,
     timetuple_from_msec,
     to_high_limit_path,
@@ -171,7 +170,9 @@ from .utils import (
     write_json_file,
     write_string,
 )
-from .utils._utils import _UnsafeExtensionError, _YDLLogger, _ProgressState
+from .utils._utils import _UnsafeExtensionError, _YDLLogger
+from .utils.progress import _ProgressState
+from .utils.version import system_identifier
 from .utils.networking import (
     HTTPHeaderDict,
     clean_headers,

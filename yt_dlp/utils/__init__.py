@@ -10,23 +10,21 @@ from .filesystem import *
 from .formatting import *
 from .json import *
 from .datetime import *
-from .math import (
-    decode_base_n,
-    decode_packed_codes,
-    encode_base_n,
-    get_windows_version,
-    lookup_unit_table,
-    parse_filesize,
-    version_tuple,
-)
-from .types import *
+from .math import *
+from .xml import *
+from .subtitles import *
+from .progress import *
+from .version import *
+
 from ._utils import *
 from ._json import *
-from ._utils import _configuration_args, _get_exe_version_output  # noqa: F401
+from ._utils import _configuration_args  # noqa: F401
+from .download import download_range_func
 from . import geo
-from ..constants import IDENTITY, NO_DEFAULT, Namespace  # noqa: F401
+from ..constants import IDENTITY, NO_DEFAULT  # noqa: F401
 
 # Prefer traversal as source of truth for traversal/html helper utilities
+from .datatypes import *
 from .traversal import (
     HTMLAttributeParser,
     HTMLBreakOnClosingTagParser,

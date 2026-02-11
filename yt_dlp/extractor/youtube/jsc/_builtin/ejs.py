@@ -21,7 +21,7 @@ from yt_dlp.extractor.youtube.jsc.provider import (
 )
 from yt_dlp.extractor.youtube.pot._provider import configuration_arg
 from yt_dlp.extractor.youtube.pot.provider import provider_bug_report_message
-from yt_dlp.utils import version_tuple
+from yt_dlp.utils.version import version_tuple
 from yt_dlp.utils._jsruntime import JsRuntimeInfo
 
 if _has_ejs:

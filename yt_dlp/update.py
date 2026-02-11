@@ -31,9 +31,8 @@ from .utils import (
     format_field,
     remove_end,
     shell_quote,
-    system_identifier,
-    version_tuple,
 )
+from .utils.version import system_identifier, version_tuple
 from .version import (
     CHANNEL,
     ORIGIN,

@@ -31,7 +31,7 @@ from ..utils import (
     timetuple_from_msec,
     try_call,
 )
-from ..utils._utils import _ProgressState
+from ..utils.progress import _ProgressState
 
 
 class FileDownloader:

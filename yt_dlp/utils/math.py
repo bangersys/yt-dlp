@@ -86,18 +86,6 @@ def lookup_unit_table(unit_table, s, strict=False):
 from .formatting import int_or_none
 
 
-def version_tuple(v, *, lenient=False):
-    parse = int_or_none(default=-1) if lenient else int
-    return tuple(parse(e) for e in re.split(r'[-.]', v))
-
-
-@functools.cache
-def get_windows_version():
-    """ Get Windows version. returns () if it's not running on Windows """
-    if os.name == 'nt':
-        return version_tuple(platform.win32_ver()[1])
-    else:
-        return ()
 
 
 def parse_filesize(s):

@@ -10,7 +10,7 @@ from ..utils import (
     _configuration_args,
     deprecation_warning,
 )
-from ..utils._utils import _ProgressState
+from ..utils.progress import _ProgressState
 
 
 class PostProcessorMetaClass(type):

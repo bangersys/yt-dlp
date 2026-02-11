@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import bisect
+import enum
 import threading
 import time
 
@@ -107,3 +108,32 @@ class SmoothValue:
 
     def reset(self):
         self.value = self.smooth = self._initial
+
+
+class _ProgressState(enum.Enum):
+    """
+    Represents a state for a progress bar.
+
+    See: https://conemu.github.io/en/AnsiEscapeCodes.html#ConEmu_specific_OSC
+    """
+
+    HIDDEN = 0
+    INDETERMINATE = 3
+    VISIBLE = 1
+    WARNING = 4
+    ERROR = 2
+
+    @classmethod
+    def from_dict(cls, s, /):
+        if s['status'] == 'finished':
+            return cls.INDETERMINATE
+
+        # Not currently used
+        if s['status'] == 'error':
+            return cls.ERROR
+
+        return cls.INDETERMINATE if s.get('_percent') is None else cls.VISIBLE
+
+    def get_ansi_escape(self, /, percent=None):
+        percent = 0 if percent is None else int(percent)
+        return f'\033]9;4;{self.value};{percent}\007'
