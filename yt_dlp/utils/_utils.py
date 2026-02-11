@@ -2991,33 +2991,8 @@ class ISO639Utils:
                 return short_name
 
 
-class ISO3166Utils:
-    # From http://data.okfn.org/data/core/country-list
-    _country_map = COUNTRY_MAP
-
-    @classmethod
-    def short2full(cls, code):
-        """Convert an ISO 3166-2 country code to the corresponding full name"""
-        return cls._country_map.get(code.upper())
-
-
-class GeoUtils:
-    # Major IPv4 address blocks per country
-    _country_ip_map = COUNTRY_IP_MAP
-
-    @classmethod
-    def random_ipv4(cls, code_or_block):
-        if len(code_or_block) == 2:
-            block = cls._country_ip_map.get(code_or_block.upper())
-            if not block:
-                return None
-        else:
-            block = code_or_block
-        addr, preflen = block.split('/')
-        addr_min = struct.unpack('!L', socket.inet_aton(addr))[0]
-        addr_max = addr_min | (0xffffffff >> int(preflen))
-        return str(socket.inet_ntoa(
-            struct.pack('!L', random.randint(addr_min, addr_max))))
+# ISO3166Utils and GeoUtils moved to yt_dlp.utils.geo
+from .geo import GeoUtils, ISO3166Utils
 
 
 # Both long_to_bytes and bytes_to_long are adapted from PyCrypto, which is

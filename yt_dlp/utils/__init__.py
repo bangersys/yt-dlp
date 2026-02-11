@@ -15,6 +15,7 @@ from .types import *
 from ._utils import *
 from ._json import *
 from ._utils import _configuration_args, _get_exe_version_output  # noqa: F401
+from . import geo
 from ..constants import IDENTITY, NO_DEFAULT, Namespace  # noqa: F401
 
 # Prefer traversal as source of truth for traversal/html helper utilities

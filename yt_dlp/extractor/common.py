@@ -44,7 +44,7 @@ from ..utils import (
     ExtractorError,
     FormatSorter,
     GeoRestrictedError,
-    GeoUtils,
+    geo,
     ISO639Utils,
     LenientJSONDecoder,
     Popen,
@@ -694,62 +694,13 @@ class InfoExtractor:
                     (similar to _GEO_IP_BLOCKS)
 
         """
-        if not self._x_forwarded_for_ip:
-
-            # Geo bypass mechanism is explicitly disabled by user
-            if not self.get_param('geo_bypass', True):
-                return
-
-            if not geo_bypass_context:
-                geo_bypass_context = {}
-
-            # Backward compatibility: previously _initialize_geo_bypass
-            # expected a list of countries, some 3rd party code may still use
-            # it this way
-            if isinstance(geo_bypass_context, (list, tuple)):
-                geo_bypass_context = {
-                    'countries': geo_bypass_context,
-                }
-
-            # The whole point of geo bypass mechanism is to fake IP
-            # as X-Forwarded-For HTTP header based on some IP block or
-            # country code.
-
-            # Path 1: bypassing based on IP block in CIDR notation
-
-            # Explicit IP block specified by user, use it right away
-            # regardless of whether extractor is geo bypassable or not
-            ip_block = self.get_param('geo_bypass_ip_block', None)
-
-            # Otherwise use random IP block from geo bypass context but only
-            # if extractor is known as geo bypassable
-            if not ip_block:
-                ip_blocks = geo_bypass_context.get('ip_blocks')
-                if self._GEO_BYPASS and ip_blocks:
-                    ip_block = random.choice(ip_blocks)
-
-            if ip_block:
-                self._x_forwarded_for_ip = GeoUtils.random_ipv4(ip_block)
-                self.write_debug(f'Using fake IP {self._x_forwarded_for_ip} as X-Forwarded-For')
-                return
-
-            # Path 2: bypassing based on country code
-
-            # Explicit country code specified by user, use it right away
-            # regardless of whether extractor is geo bypassable or not
-            country = self.get_param('geo_bypass_country', None)
-
-            # Otherwise use random country code from geo bypass context but
-            # only if extractor is known as geo bypassable
-            if not country:
-                countries = geo_bypass_context.get('countries')
-                if self._GEO_BYPASS and countries:
-                    country = random.choice(countries)
-
-            if country:
-                self._x_forwarded_for_ip = GeoUtils.random_ipv4(country)
-                self._downloader.write_debug(
-                    f'Using fake IP {self._x_forwarded_for_ip} ({country.upper()}) as X-Forwarded-For')
+        self._x_forwarded_for_ip = geo.initialize_geo_bypass(
+            geo_bypass_context,
+            self.get_param,
+            self.write_debug,
+            is_geo_bypassable=self._GEO_BYPASS,
+            x_forwarded_for_ip=self._x_forwarded_for_ip,
+        )
 
     def extract(self, url):
         """Extracts URL information and returns it in list of dicts."""
@@ -786,18 +737,17 @@ class InfoExtractor:
             raise ExtractorError('An extractor error has occurred.', cause=e, video_id=self.get_temp_id(url))
 
     def __maybe_fake_ip_and_retry(self, countries):
-        if (not self.get_param('geo_bypass_country', None)
-                and self._GEO_BYPASS
-                and self.get_param('geo_bypass', True)
-                and not self._x_forwarded_for_ip
-                and countries):
-            country_code = random.choice(countries)
-            self._x_forwarded_for_ip = GeoUtils.random_ipv4(country_code)
-            if self._x_forwarded_for_ip:
-                self.report_warning(
-                    'Video is geo restricted. Retrying extraction with fake IP '
-                    f'{self._x_forwarded_for_ip} ({country_code.upper()}) as X-Forwarded-For.')
-                return True
+        new_ip = geo.maybe_fake_ip_and_retry(
+            countries,
+            self.get_param,
+            self._GEO_BYPASS,
+            self._x_forwarded_for_ip,
+            self.report_warning,
+            self.write_debug,
+        )
+        if new_ip:
+            self._x_forwarded_for_ip = new_ip
+            return True
         return False
 
     def set_downloader(self, downloader):
@@ -1258,11 +1208,8 @@ class InfoExtractor:
     def raise_geo_restricted(
             self, msg='This video is not available from your location due to geo restriction',
             countries=None, metadata_available=False):
-        if metadata_available and (
-                self.get_param('ignore_no_formats_error') or self.get_param('wait_for_video')):
-            self.report_warning(msg)
-        else:
-            raise GeoRestrictedError(msg, countries=countries)
+        geo.raise_geo_restricted(
+            msg, countries, metadata_available, self.get_param, self.report_warning)
 
     def raise_no_formats(self, msg, expected=False, video_id=None):
         if expected and (
@@ -3960,11 +3907,7 @@ class InfoExtractor:
         raise NotImplementedError('This method must be implemented by subclasses')
 
     def geo_verification_headers(self):
-        headers = {}
-        geo_verification_proxy = self.get_param('geo_verification_proxy')
-        if geo_verification_proxy:
-            headers['Ytdl-request-proxy'] = geo_verification_proxy
-        return headers
+        return geo.geo_verification_headers(self.get_param)
 
     @staticmethod
     def _generic_id(url):

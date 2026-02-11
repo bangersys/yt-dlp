@@ -88,17 +88,8 @@ class RegexNotFoundError(ExtractorError):
     pass
 
 
-class GeoRestrictedError(ExtractorError):
-    """Geographic restriction Error exception.
-
-    This exception may be thrown when a video is not available from your
-    geographic location due to geographic restrictions imposed by a website.
-    """
-
-    def __init__(self, msg, countries=None, **kwargs):
-        kwargs['expected'] = True
-        super().__init__(msg, **kwargs)
-        self.countries = countries
+# GeoRestrictedError moved to yt_dlp.utils.geo
+from .geo import GeoRestrictedError
 
 
 class UserNotLive(ExtractorError):
